@@ -83,7 +83,7 @@ const createWavUrlFromPcm = (base64Pcm: string): string => {
 };
 
 const OptionItem: React.FC<{ option: QuestionOption; isEditing: boolean; onUpdate?: (text: string, isCorrect: boolean) => void }> = ({ option, isEditing, onUpdate }) => (
-    <div className={`flex items-start p-3 rounded-lg border transition-colors ${option.isCorrect ? 'bg-green-50 dark:bg-green-900/30 border-green-300 dark:border-green-800 print:bg-white print:border-slate-300' : 'bg-slate-50 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600 print:bg-white print:border-slate-300'}`}>
+    <div className={`flex items-start p-3 rounded-lg border transition-colors ${option.isCorrect ? 'bg-green-100/80 dark:bg-green-900/40 border-green-400 dark:border-green-800 print:bg-white print:border-slate-300' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 print:bg-white print:border-slate-300'}`}>
         <div 
             onClick={() => isEditing && onUpdate && onUpdate(option.text, !option.isCorrect)}
             className={`w-5 h-5 flex-shrink-0 rounded-full mr-3 mt-0.5 transition-colors ${isEditing ? 'cursor-pointer' : ''} ${option.isCorrect ? 'bg-green-500 print:bg-transparent print:border-2 print:border-slate-300' : 'border-2 border-slate-300 dark:border-slate-500 print:border-slate-300'}`}
@@ -98,7 +98,7 @@ const OptionItem: React.FC<{ option: QuestionOption; isEditing: boolean; onUpdat
                 className="w-full bg-transparent border-none focus:ring-0 text-slate-700 dark:text-slate-300"
             />
         ) : (
-            <span className={`transition-colors ${option.isCorrect ? 'text-green-800 dark:text-green-300 font-semibold print:text-black print:font-normal' : 'text-slate-700 dark:text-slate-300 print:text-black'}`}>{option.text}</span>
+            <span className={`transition-colors ${option.isCorrect ? 'text-green-900 dark:text-green-300 font-bold print:text-black print:font-normal' : 'text-slate-700 dark:text-slate-300 print:text-black'}`}>{option.text}</span>
         )}
     </div>
 );
@@ -148,18 +148,18 @@ const QuestionCard: React.FC<{ question: Question; index: number; isEditing: boo
             )}
 
             {(question.questionType === QuestionType.FILL_IN_THE_BLANK || question.questionType === QuestionType.SHORT_ANSWER || question.questionType === QuestionType.TRANSLATION) && (
-                <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg transition-colors print:hidden">
+                <div className="mt-3 p-3 bg-green-100/80 dark:bg-green-900/40 border border-green-400 dark:border-green-800 rounded-lg transition-colors print:hidden">
                     <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                         <span className="text-sm text-green-700 dark:text-green-300 font-medium shrink-0">Risposta corretta:</span>
+                         <span className="text-sm text-green-800 dark:text-green-300 font-bold shrink-0">Risposta corretta:</span>
                          {isEditing ? (
                             <input 
                                 type="text"
                                 value={question.correctAnswer || ''}
                                 onChange={(e) => onUpdate({ ...question, correctAnswer: e.target.value })}
-                                className="flex-1 text-sm font-bold text-green-800 dark:text-green-200 bg-white/50 dark:bg-black/20 border border-green-300 dark:border-green-700 rounded px-2 py-1"
+                                className="flex-1 text-sm font-bold text-green-900 dark:text-green-200 bg-white/70 dark:bg-black/20 border border-green-400 dark:border-green-700 rounded px-2 py-1"
                             />
                          ) : (
-                            <span className="font-bold text-green-800 dark:text-green-200">{question.correctAnswer}</span>
+                            <span className="font-bold text-green-900 dark:text-green-200">{question.correctAnswer}</span>
                          )}
                     </div>
                 </div>
@@ -176,9 +176,9 @@ const ReadingSectionCard: React.FC<{ section: ReadingSection; onRegenerate: () =
     };
 
     return (
-        <div className="p-5 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/30 shadow-sm transition-colors print:border-slate-300 print:bg-white">
+        <div className="p-5 rounded-xl border border-amber-400 dark:border-amber-800 bg-amber-100/50 dark:bg-amber-900/30 shadow-sm transition-colors print:border-slate-300 print:bg-white">
             <div className="flex justify-between items-center mb-2">
-                <h4 className="text-lg font-bold text-amber-800 dark:text-amber-300 print:text-black">Reading Comprehension</h4>
+                <h4 className="text-lg font-bold text-amber-900 dark:text-amber-300 print:text-black">Reading Comprehension</h4>
                 {!isEditing && (
                     <button 
                         onClick={onRegenerate}
@@ -224,8 +224,8 @@ const ReadingSectionCard: React.FC<{ section: ReadingSection; onRegenerate: () =
 };
 
 const WritingPromptCard: React.FC<{ prompt: WritingPrompt; isEditing: boolean; onUpdate: (updatedPrompt: WritingPrompt) => void }> = ({ prompt, isEditing, onUpdate }) => (
-     <div className="p-5 rounded-xl border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/30 shadow-sm transition-colors print:border-slate-300 print:bg-white print:break-inside-avoid">
-        <h4 className="text-lg font-bold text-sky-800 dark:text-sky-300 print:text-black mb-2">Writing Prompt</h4>
+     <div className="p-5 rounded-xl border border-sky-400 dark:border-sky-800 bg-sky-100/50 dark:bg-sky-900/30 shadow-sm transition-colors print:border-slate-300 print:bg-white print:break-inside-avoid">
+        <h4 className="text-lg font-bold text-sky-900 dark:text-sky-300 print:text-black mb-2">Writing Prompt</h4>
         <div className="p-4 bg-white dark:bg-slate-800 rounded-md border border-slate-200 dark:border-slate-700 print:border-slate-300 print:bg-white">
             {isEditing ? (
                 <textarea 
@@ -268,11 +268,11 @@ const ListeningSectionCard: React.FC<{ section: ListeningSection; onRegenerate: 
     };
 
     return (
-        <div className="p-5 rounded-xl border border-purple-300 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/30 shadow-sm transition-colors print:border-slate-300 print:bg-white">
+        <div className="p-5 rounded-xl border border-purple-400 dark:border-purple-800 bg-purple-100/50 dark:bg-purple-900/30 shadow-sm transition-colors print:border-slate-300 print:bg-white">
             <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-3">
-                    <SpeakerWaveIcon className="w-6 h-6 text-purple-800 dark:text-purple-300 print:text-black" />
-                    <h4 className="text-lg font-bold text-purple-800 dark:text-purple-300 print:text-black">Listening Exercise</h4>
+                    <SpeakerWaveIcon className="w-6 h-6 text-purple-900 dark:text-purple-300 print:text-black" />
+                    <h4 className="text-lg font-bold text-purple-900 dark:text-purple-300 print:text-black">Listening Exercise</h4>
                 </div>
                  {!isEditing && (
                     <button 
@@ -422,7 +422,7 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
     <div className="flex flex-col lg:flex-row gap-6 w-full">
       {/* Left Navigation pane for Variants */}
       <div className="w-full lg:w-64 flex-shrink-0 flex flex-col gap-2">
-         <h2 className="text-lg font-bold text-slate-800 mb-2 pl-2">Varianti Generate</h2>
+         <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 transition-colors mb-2 pl-2">Varianti Generate</h2>
          {quizzes.map((quiz, index) => {
             const isSelected = activeTab === index;
             return (
@@ -431,18 +431,18 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
                 onClick={() => setActiveTab(index)}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition-all text-left border ${
                   isSelected 
-                    ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm' 
-                    : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-200 hover:bg-slate-50'
+                    ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800 text-indigo-800 dark:text-indigo-300 shadow-sm' 
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-indigo-200 dark:hover:border-indigo-800 hover:bg-slate-50 dark:hover:bg-slate-800/50'
                 }`}
               >
-                  <div className={`p-2 rounded-lg ${isSelected ? 'bg-indigo-100' : 'bg-slate-100'}`}>
+                  <div className={`p-2 rounded-lg ${isSelected ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                       </svg>
                   </div>
                   <div>
-                      <div className="text-slate-900 font-bold">{quiz.versionLabel ? `Fila ${quiz.versionLabel}` : `Versione ${index + 1}`}</div>
-                      <div className={`text-xs ${isSelected ? 'text-indigo-600' : 'text-slate-500'}`}>4 Pagine</div>
+                      <div className="text-slate-900 dark:text-slate-100 font-bold transition-colors">{quiz.versionLabel ? `Fila ${quiz.versionLabel}` : `Versione ${index + 1}`}</div>
+                      <div className={`text-xs transition-colors ${isSelected ? 'text-indigo-700 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>Quiz Pronto</div>
                   </div>
               </button>
             )
@@ -458,62 +458,62 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
                 <button
                     onClick={handlePrint}
                     disabled={isPrinting || isAnyActionInProgress}
-                    className="flex items-center px-4 py-2 border border-slate-300 rounded-lg text-slate-700 bg-white hover:bg-slate-50 font-medium transition-colors disabled:opacity-50 text-sm shadow-sm"
+                    className="flex items-center px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 font-medium transition-colors disabled:opacity-50 text-sm shadow-sm"
                 >
-                    {isPrinting ? <LoadingSpinner className="mr-2" dotClassName="w-1 h-1" /> : <PrinterIcon className="w-4 h-4 mr-2 text-slate-500" />}
-                    Stampa o Scarica PDF
+                    {isPrinting ? <LoadingSpinner className="mr-2" dotClassName="w-1 h-1" /> : <PrinterIcon className="w-4 h-4 mr-2 text-slate-500 dark:text-slate-400" />}
+                    Stampa / Scarica PDF
                 </button>
                 <button
                     onClick={handleDownloadDocx}
                     disabled={isGeneratingDocx || isAnyActionInProgress}
-                    className="flex items-center px-4 py-2 border border-slate-300 rounded-lg text-slate-700 bg-white hover:bg-slate-50 font-medium transition-colors disabled:opacity-50 text-sm shadow-sm"
+                    className="flex items-center px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 font-medium transition-colors disabled:opacity-50 text-sm shadow-sm"
                 >
                     {isGeneratingDocx ? (
                         <LoadingSpinner className="mr-2" dotClassName="w-1 h-1" />
                     ) : (
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 mr-2 text-blue-600">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 mr-2 text-blue-600 dark:text-blue-400">
                           <path d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0016.5 9h-1.875a1.875 1.875 0 01-1.875-1.875V5.25A3.75 3.75 0 009 1.5H5.625zM12.986 18h2.264v-1.125h-2.264V18zM12.986 16.125h2.264V15h-2.264v1.125zM15.25 14.25v-1.125h-2.264v1.125h2.264zM10.714 18h2.271v-1.125H10.714V18zM10.714 16.125h2.271V15h-2.271v1.125zM12.985 14.25v-1.125h-2.271v1.125h2.271zM8.471 18h2.243v-1.125H8.471V18zM8.471 16.125h2.243V15H8.471v1.125zM10.714 14.25v-1.125H8.471v1.125h2.243z" />
                         </svg>
                     )}
-                    Scarica Word (.docx)
+                    Scarica Word
                 </button>
                 <button
                   onClick={onCreateDoc}
                   disabled={isAnyActionInProgress}
-                  className="flex items-center px-4 py-2 border border-slate-300 rounded-lg text-slate-700 bg-white hover:bg-slate-50 font-medium transition-colors disabled:opacity-50 text-sm shadow-sm"
+                  className="flex items-center px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 font-medium transition-colors disabled:opacity-50 text-sm shadow-sm"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 mr-2 text-blue-500"><path d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0016.5 9h-1.875a1.875 1.875 0 01-1.875-1.875V5.25A3.75 3.75 0 009 1.5H5.625zM7.5 15a.75.75 0 01.75-.75h7.5a.75.75 0 010 1.5h-7.5A.75.75 0 017.5 15zm.75 2.25a.75.75 0 000 1.5H12a.75.75 0 000-1.5H8.25z"/></svg>
-                  Modifica con Google Docs
+                  Google Docs
                 </button>
                  <button
                   onClick={onCreateForm}
                   disabled={isAnyActionInProgress}
-                  className="flex items-center px-4 py-2 border border-slate-300 rounded-lg text-slate-700 bg-white hover:bg-slate-50 font-medium transition-colors disabled:opacity-50 text-sm shadow-sm"
+                  className="flex items-center px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 font-medium transition-colors disabled:opacity-50 text-sm shadow-sm"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 mr-2 text-purple-600"><path d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0016.5 9h-1.875a1.875 1.875 0 01-1.875-1.875V5.25A3.75 3.75 0 009 1.5H5.625zM7.5 15a.75.75 0 01.75-.75h7.5a.75.75 0 010 1.5h-7.5A.75.75 0 017.5 15zm.75 2.25a.75.75 0 000 1.5H12a.75.75 0 000-1.5H8.25z"/></svg>
-                  Modifica con Google Moduli
+                  Google Moduli
                 </button>
               </div>
           </div>
 
-          <div ref={printRef} className="bg-white border text-left border-slate-200 rounded-2xl shadow-sm w-full animate-in fade-in transition-all">
-           <div className="p-8 border-b border-slate-100 flex justify-between items-center">
+          <div ref={printRef} className="bg-white dark:bg-slate-800 border text-left border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm w-full animate-in fade-in transition-colors">
+           <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center transition-colors">
                 {isEditing ? (
                     <input 
                         type="text"
                         value={activeQuiz.title}
                         onChange={(e) => handleTitleUpdate(e.target.value)}
-                        className="text-2xl font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded px-3 py-1 w-full max-w-2xl"
+                        className="text-2xl font-bold text-slate-800 dark:text-slate-100 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded px-3 py-1 w-full max-w-2xl focus:ring-2 focus:ring-emerald-500 outline-none"
                     />
                 ) : (
-                    <h3 className="text-2xl font-bold text-slate-800">{activeQuiz.title}</h3>
+                    <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 transition-colors">{activeQuiz.title}</h3>
                 )}
                 <button 
                     onClick={() => setIsEditing(!isEditing)}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all shadow-sm ${
                         isEditing 
-                        ? 'bg-emerald-600 text-white hover:bg-emerald-700' 
-                        : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'
+                        ? 'bg-emerald-600 text-white hover:bg-emerald-700 border border-emerald-700' 
+                        : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
                     }`}
                 >
                     {isEditing ? (
@@ -578,12 +578,12 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
                     return (
                       <section key={regenId}>
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-bold text-slate-800 pb-2 print:text-black print:border-slate-300">{topic} - {type}</h3>
+                            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 pb-2 transition-colors print:text-black print:border-slate-300">{topic} - {type}</h3>
                             {!isEditing && (
                                 <button 
                                     onClick={() => onRegenerateSection(activeTab, topic, type.replace(' (Multiple Choice)', ''), questions.length)}
                                     disabled={isAnyActionInProgress}
-                                    className="flex items-center text-xs font-semibold text-indigo-600 hover:text-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed transition print:hidden bg-indigo-50 px-3 py-1.5 rounded-full"
+                                    className="flex items-center text-xs font-semibold text-indigo-700 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 disabled:opacity-50 disabled:cursor-not-allowed transition print:hidden bg-indigo-100/50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-full"
                                 >
                                      {isCurrentRegen ? (
                                          <LoadingSpinner className="mr-2" dotClassName="w-1 h-1" />

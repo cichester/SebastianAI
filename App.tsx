@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from './services/firebase';
 import { getUserHistory, saveUserHistory } from './services/firestoreService';
 import QuizInputForm from './components/QuizInputForm';
@@ -11,6 +11,7 @@ import HistoryPanel from './components/HistoryPanel';
 import DashboardView from './components/DashboardView';
 import LoginView from './components/LoginView';
 import Sidebar from './components/Sidebar';
+import SupportModal from './components/SupportModal';
 import { SunIcon, MoonIcon } from './components/icons';
 import { generateQuiz, regenerateQuestions, regenerateComplexSection, type GenerationProgress } from './services/geminiService';
 import { validateQuizDraft, validateRegeneratedQuestions, validateRegeneratedComplexSection } from './utils/validation';
@@ -82,12 +83,14 @@ const App: React.FC = () => {
   const [isRetrying, setIsRetrying] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
+  const [isSupportModalOpen, setIsSupportModalOpen] = useState<boolean>(false);
   const [retryCount, setRetryCount] = useState(0);
   const [webAppUrl, setWebAppUrl] = useState<string | null>(null);
   const [formCreationState, setFormCreationState] = useState<CreationState>({ status: 'idle' });
   const [docCreationState, setDocCreationState] = useState<CreationState>({ status: 'idle' });
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [user, setUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState<boolean>(false);
   const [currentView, setCurrentView] = useState<'dashboard' | 'create' | 'preview' | 'settings'>('dashboard');
   const [pdfFormat, setPdfFormat] = useState<PdfFormat>(() => {
@@ -105,10 +108,11 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setIsAuthenticated(!!user);
-      if (user) {
-          const userHistory = await getUserHistory(user.uid);
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      setUser(u);
+      setIsAuthenticated(!!u);
+      if (u) {
+          const userHistory = await getUserHistory(u.uid);
           setHistory(userHistory);
       } else {
           setHistory([]);
@@ -518,6 +522,20 @@ const App: React.FC = () => {
     });
   }, []);
 
+  const handleDuplicateHistory = useCallback((entry: HistoryEntry) => {
+      const duplicatedEntry: HistoryEntry = {
+          ...entry,
+          id: Date.now(),
+          createdAt: new Date().toISOString(),
+          title: `${entry.title} (Copia)`
+      };
+      updateHistory(duplicatedEntry);
+  }, [updateHistory]);
+
+  const handleDuplicateAndRegenerate = useCallback((entry: HistoryEntry) => {
+      startQuizGeneration(entry.params);
+  }, [startQuizGeneration]);
+
   const getFormCreationStateUI = () => {
       if (formCreationState.status === 'idle') return null;
 
@@ -641,16 +659,20 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50 font-sans">
+    <div className="flex min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-sans transition-colors duration-200">
       <Sidebar 
+        user={user || undefined}
         currentView={currentView} 
         setCurrentView={setCurrentView} 
+        theme={theme}
+        toggleTheme={toggleTheme}
         onLogout={() => {
             import('./services/firebase').then(({ auth }) => {
                 auth.signOut();
             });
         }}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
+        onOpenSupport={() => setIsSupportModalOpen(true)}
       />
 
       <main className="flex-1 ml-64 p-8">
@@ -660,6 +682,8 @@ const App: React.FC = () => {
             onLoad={handleLoadFromHistory}
             onDelete={handleDeleteFromHistory}
             onUpdateTitle={handleUpdateHistoryTitle}
+            onDuplicate={handleDuplicateHistory}
+            onDuplicateAndRegenerate={handleDuplicateAndRegenerate}
             onCreateNew={() => { setQuizDraft(null); setCurrentView('create'); }}
           />
         )}
@@ -680,56 +704,6 @@ const App: React.FC = () => {
             
             <QuizInputForm onGenerate={handleGenerateQuiz} isLoading={isLoading} />
             
-            <AnimatePresence>
-              {isLoading && (
-                <motion.div 
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
-                >
-                  <motion.div 
-                    initial={{ scale: 0.9, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0.9, opacity: 0 }}
-                    className="relative bg-white dark:bg-slate-800 p-10 rounded-3xl shadow-2xl border border-emerald-100 dark:border-emerald-900/30 max-w-md w-full flex flex-col items-center text-center"
-                  >
-                    <LoadingSpinner 
-                      className="text-emerald-500 mb-6" 
-                      dotClassName="w-4 h-4" 
-                      progress={Math.round(displayProgress)}
-                      message={generationProgress.message}
-                      versionStatus={generationProgress.currentVersion && generationProgress.totalVersions 
-                        ? `${generationProgress.currentVersion}/${generationProgress.totalVersions}` 
-                        : undefined}
-                    />
-                    
-                    <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
-                        {generationProgress.step === 'audio' ? "Generazione Audio..." : "Creazione Quiz..."}
-                    </h3>
-                    
-                    <p className="text-slate-600 dark:text-slate-400 mb-8">
-                      {generationProgress.step === 'audio' 
-                        ? "Sto trasformando i testi in audio di alta qualità per la prova di ascolto."
-                        : "L'intelligenza artificiale sta scrivendo domande su misura per i tuoi studenti."}
-                    </p>
-
-                    {retryCount > 1 && (
-                        <div className="mb-6 px-4 py-2 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 rounded-full text-xs font-medium border border-amber-100 dark:border-amber-800/30">
-                            Tentativo di recupero {retryCount} di {MAX_RETRIES}
-                        </div>
-                    )}
-                    
-                    <button
-                        onClick={handleCancelGeneration}
-                        className="px-6 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-xl hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 transition-all text-sm border border-slate-200 dark:border-slate-600"
-                    >
-                        Annulla Generazione
-                    </button>
-                  </motion.div>
-                </motion.div>
-              )}
-            </AnimatePresence>
 
             <AnimatePresence>
               {showFormatSelector && pendingParams && (
@@ -860,6 +834,60 @@ const App: React.FC = () => {
             }}
         />
       )}
+      {isSupportModalOpen && (
+        <SupportModal onClose={() => setIsSupportModalOpen(false)} />
+      )}
+
+      <AnimatePresence>
+        {isLoading && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative bg-white dark:bg-slate-800 p-10 rounded-3xl shadow-2xl border border-emerald-100 dark:border-emerald-900/30 max-w-md w-full flex flex-col items-center text-center"
+            >
+              <LoadingSpinner 
+                className="text-emerald-500 mb-6" 
+                dotClassName="w-4 h-4" 
+                progress={Math.round(displayProgress)}
+                message={generationProgress.message}
+                versionStatus={generationProgress.currentVersion && generationProgress.totalVersions 
+                  ? `${generationProgress.currentVersion}/${generationProgress.totalVersions}` 
+                  : undefined}
+              />
+              
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
+                  {generationProgress.step === 'audio' ? "Generazione Audio..." : "Creazione Quiz..."}
+              </h3>
+              
+              <p className="text-slate-600 dark:text-slate-400 mb-8">
+                {generationProgress.step === 'audio' 
+                  ? "Sto trasformando i testi in audio di alta qualità per la prova di ascolto."
+                  : "L'intelligenza artificiale sta scrivendo domande su misura per i tuoi studenti."}
+              </p>
+
+              {retryCount > 1 && (
+                  <div className="mb-6 px-4 py-2 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 rounded-full text-xs font-medium border border-amber-100 dark:border-amber-800/30">
+                      Tentativo di recupero {retryCount} di {MAX_RETRIES}
+                  </div>
+              )}
+              
+              <button
+                  onClick={handleCancelGeneration}
+                  className="px-6 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-xl hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 transition-all text-sm border border-slate-200 dark:border-slate-600"
+              >
+                  Annulla Generazione
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
