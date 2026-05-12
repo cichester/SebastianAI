@@ -1,0 +1,8 @@
+{
+  "name": "Sebastian AI",
+  "description": "Il tuo maggiordomo personale che ti aiuterà a creare i compiti di lingua per i tuoi studenti!",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": []
+}

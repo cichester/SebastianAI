@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@media print {
+  body {
+    background-color: white !important;
+    color: black !important;
+  }
+  @page {
+    margin: 20mm;
+  }
+}
+
+/* Styles for html2pdf generation */
+.is-printing-pdf .print\:hidden {
+  display: none !important;
+}
+
+.is-printing-pdf .print\:bg-white {
+  background-color: white !important;
+}
+
+.is-printing-pdf .print\:text-black {
+  color: black !important;
+}
+
+.is-printing-pdf .print\:border-slate-300 {
+  border-color: #cbd5e1 !important;
+}
+
+.is-printing-pdf .print\:break-inside-avoid {
+  break-inside: avoid !important;
+}
+
+.is-printing-pdf .print\:bg-transparent {
+  background-color: transparent !important;
+}
+
+.is-printing-pdf .print\:border-2 {
+  border-width: 2px !important;
+}
+
+.is-printing-pdf .print\:border {
+  border-width: 1px !important;
+}
+
+.is-printing-pdf .print\:font-normal {
+  font-weight: 400 !important;
+}
+
+.is-printing-pdf .print\:text-slate-600 {
+  color: #475569 !important;
+}
+
+.is-printing-pdf {
+  color: black !important;
+  background-color: white !important;
+  padding: 20px !important;
+}
