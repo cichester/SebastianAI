@@ -1,6 +1,8 @@
-
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './services/firebase';
+import { getUserHistory, saveUserHistory } from './services/firestoreService';
 import QuizInputForm from './components/QuizInputForm';
 import QuizPreview from './components/QuizPreview';
 import SettingsModal from './components/SettingsModal';
@@ -86,6 +88,7 @@ const App: React.FC = () => {
   const [docCreationState, setDocCreationState] = useState<CreationState>({ status: 'idle' });
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [authChecked, setAuthChecked] = useState<boolean>(false);
   const [currentView, setCurrentView] = useState<'dashboard' | 'create' | 'preview' | 'settings'>('dashboard');
   const [pdfFormat, setPdfFormat] = useState<PdfFormat>(() => {
     if (typeof window !== 'undefined' && safeGetItem('pdfFormat')) {
@@ -98,11 +101,22 @@ const App: React.FC = () => {
     if (typeof window !== 'undefined' && safeGetItem('theme')) {
         return safeGetItem('theme') as 'light' | 'dark';
     }
-    if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        return 'dark';
-    }
-    return 'light';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setIsAuthenticated(!!user);
+      if (user) {
+          const userHistory = await getUserHistory(user.uid);
+          setHistory(userHistory);
+      } else {
+          setHistory([]);
+      }
+      setAuthChecked(true);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     if (theme === 'dark') {
@@ -123,24 +137,7 @@ const App: React.FC = () => {
     if (savedUrl) {
       setWebAppUrl(savedUrl);
     }
-    // Load history from localStorage on initial render
-    try {
-        const savedHistory = safeGetItem(HISTORY_KEY);
-        if (savedHistory) {
-            const parsed = JSON.parse(savedHistory);
-            // Simple migration check: if item has 'quiz' but not 'quizzes', wrap it
-            const migrated = parsed.map((entry: any) => {
-                if (entry.quiz && !entry.quizzes) {
-                    return { ...entry, quizzes: [entry.quiz] };
-                }
-                return entry;
-            });
-            setHistory(migrated);
-        }
-    } catch (e) {
-        console.error("Failed to parse history from localStorage", e);
-        safeRemoveItem(HISTORY_KEY); // Clear corrupted data
-    }
+
   }, []);
   
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -148,7 +145,9 @@ const App: React.FC = () => {
   const updateHistory = useCallback((newEntry: HistoryEntry) => {
       setHistory(currentHistory => {
           const updatedHistory = [newEntry, ...currentHistory].slice(0, MAX_HISTORY_ITEMS);
-          safeSetItem(HISTORY_KEY, JSON.stringify(updatedHistory));
+          if (auth.currentUser) {
+              saveUserHistory(auth.currentUser.uid, updatedHistory).catch(console.error);
+          }
           return updatedHistory;
       });
   }, []);
@@ -388,28 +387,29 @@ const App: React.FC = () => {
 
 
   const handleApproveAndCreateForm = async () => {
-    if (!quizDraft || !webAppUrl) {
+    const token = safeGetItem('googleAccessToken');
+    if (!quizDraft || !token) {
       setIsSettingsModalOpen(true);
       return;
     }
     
-    setFormCreationState({ status: 'loading', message: `Contatto lo script di Google per creare ${quizDraft.length} form...` });
+    setFormCreationState({ status: 'loading', message: `Contatto il server per creare ${quizDraft.length} form...` });
     setDocCreationState({ status: 'idle' }); 
 
     try {
         const createdUrls: string[] = [];
         const allErrors: FailedQuestionInfo[] = [];
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
         for (let i = 0; i < quizDraft.length; i++) {
              const quiz = quizDraft[i];
              setFormCreationState({ status: 'loading', message: `Creazione Form ${i+1} di ${quizDraft.length} (${quiz.versionLabel || 'A'})...` });
 
-             const payload = { ...quiz, action: 'create', target: 'form' };
-             const response = await fetch(webAppUrl, {
+             const response = await fetch(`${backendUrl}/api/forms/create`, {
                 method: 'POST',
                 mode: 'cors',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify(payload)
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ quiz, access_token: token })
             });
 
             if (!response.ok) throw new Error(`Errore di rete file ${i+1}: ${response.status}`);
@@ -436,27 +436,28 @@ const App: React.FC = () => {
   };
 
   const handleApproveAndCreateDoc = async () => {
-    if (!quizDraft || !webAppUrl) {
+    const token = safeGetItem('googleAccessToken');
+    if (!quizDraft || !token) {
       setIsSettingsModalOpen(true);
       return;
     }
     
-    setDocCreationState({ status: 'loading', message: `Contatto lo script di Google per creare ${quizDraft.length} documenti...` });
+    setDocCreationState({ status: 'loading', message: `Contatto il server per creare ${quizDraft.length} documenti...` });
     setFormCreationState({ status: 'idle' });
 
     try {
         const createdUrls: string[] = [];
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
          for (let i = 0; i < quizDraft.length; i++) {
              const quiz = quizDraft[i];
              setDocCreationState({ status: 'loading', message: `Creazione Doc ${i+1} di ${quizDraft.length} (${quiz.versionLabel || 'A'})...` });
 
-             const payload = { ...quiz, action: 'create', target: 'doc' };
-             const response = await fetch(webAppUrl, {
+             const response = await fetch(`${backendUrl}/api/docs/create`, {
                 method: 'POST',
                 mode: 'cors',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify(payload)
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ quiz, access_token: token })
             });
 
             if (!response.ok) throw new Error(`Errore di rete file ${i+1}: ${response.status}`);
@@ -498,7 +499,9 @@ const App: React.FC = () => {
   const handleDeleteFromHistory = useCallback((id: number) => {
       setHistory(currentHistory => {
           const updatedHistory = currentHistory.filter(entry => entry.id !== id);
-          localStorage.setItem(HISTORY_KEY, JSON.stringify(updatedHistory));
+          if (auth.currentUser) {
+              saveUserHistory(auth.currentUser.uid, updatedHistory).catch(console.error);
+          }
           return updatedHistory;
       });
   }, []);
@@ -508,7 +511,9 @@ const App: React.FC = () => {
         const updatedHistory = currentHistory.map(entry => 
             entry.id === id ? { ...entry, title: newTitle } : entry
         );
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(updatedHistory));
+        if (auth.currentUser) {
+            saveUserHistory(auth.currentUser.uid, updatedHistory).catch(console.error);
+        }
         return updatedHistory;
     });
   }, []);
@@ -612,7 +617,9 @@ const App: React.FC = () => {
             // We check if the quizzes match the length and params roughly
             if (updatedHistory[0].quizzes.length === newDrafts.length) {
                 updatedHistory[0] = { ...updatedHistory[0], quizzes: newDrafts };
-                localStorage.setItem(HISTORY_KEY, JSON.stringify(updatedHistory));
+                if (auth.currentUser) {
+                    saveUserHistory(auth.currentUser.uid, updatedHistory).catch(console.error);
+                }
             }
             return updatedHistory;
         });
@@ -621,8 +628,16 @@ const App: React.FC = () => {
     });
   }, []);
 
+  if (!authChecked) {
+    return (
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+            <LoadingSpinner message="Verifica credenziali..." />
+        </div>
+    );
+  }
+
   if (!isAuthenticated) {
-    return <LoginView onLogin={() => setIsAuthenticated(true)} />;
+    return <LoginView onLogin={() => {}} />;
   }
 
   return (
@@ -630,7 +645,11 @@ const App: React.FC = () => {
       <Sidebar 
         currentView={currentView} 
         setCurrentView={setCurrentView} 
-        onLogout={() => setIsAuthenticated(false)}
+        onLogout={() => {
+            import('./services/firebase').then(({ auth }) => {
+                auth.signOut();
+            });
+        }}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
       />
 

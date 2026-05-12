@@ -201,7 +201,7 @@ async function makeApiCall(prompt: string, schema: object, signal?: AbortSignal)
 
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-3.1-pro-preview",
+            model: "gemini-3-flash-preview",
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
@@ -399,7 +399,7 @@ export async function regenerateQuestions(language: string, level: string, topic
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
   try {
       const response = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview",
+        model: "gemini-3-flash-preview",
         contents: prompt,
         config: {
             responseMimeType: "application/json",

@@ -1,10 +1,63 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { auth, googleProvider } from '../services/firebase';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signInWithPopup, 
+  GoogleAuthProvider 
+} from 'firebase/auth';
 
 interface LoginViewProps {
   onLogin: () => void;
 }
 
 const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
+    try {
+      if (isRegistering) {
+        await createUserWithEmailAndPassword(auth, email, password);
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+      }
+      onLogin();
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Si è verificato un errore');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleAuth = async () => {
+    setError('');
+    setIsLoading(true);
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      
+      // Estraiamo il token OAuth di Google che ci servirà per creare Docs e Forms
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (credential?.accessToken) {
+        localStorage.setItem('googleAccessToken', credential.accessToken);
+      }
+      
+      onLogin();
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Si è verificato un errore con Google');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-10 max-w-md w-full">
@@ -16,20 +69,46 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
           </div>
         </div>
         
-        <h2 className="text-2xl font-bold text-center text-slate-900 mb-8 tracking-tight">Bentornato, Docente</h2>
+        <h2 className="text-2xl font-bold text-center text-slate-900 mb-8 tracking-tight">
+          {isRegistering ? 'Crea un account' : 'Bentornato, Docente'}
+        </h2>
+
+        {error && (
+          <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-4">
+            {error}
+          </div>
+        )}
         
-        <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); onLogin(); }}>
+        <form className="space-y-4" onSubmit={handleEmailAuth}>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-            <input type="email" placeholder="nome@esempio.it" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-slate-900" />
+            <input 
+              type="email" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="nome@esempio.it" 
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-slate-900" 
+              required
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
-            <input type="password" placeholder="••••••••" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-slate-900" />
+            <input 
+              type="password" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••" 
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-slate-900" 
+              required
+            />
           </div>
           
-          <button type="button" onClick={onLogin} className="w-full bg-[#006e40] hover:bg-[#005a34] text-white font-medium py-3 rounded-lg transition-colors mt-2">
-            Accedi
+          <button 
+            type="submit" 
+            disabled={isLoading}
+            className="w-full bg-[#006e40] hover:bg-[#005a34] disabled:opacity-50 text-white font-medium py-3 rounded-lg transition-colors mt-2"
+          >
+            {isLoading ? 'Attendi...' : (isRegistering ? 'Registrati' : 'Accedi')}
           </button>
         </form>
 
@@ -39,7 +118,12 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
           <div className="flex-1 border-t border-slate-200"></div>
         </div>
 
-        <button type="button" onClick={onLogin} className="w-full bg-white border border-slate-300 text-slate-700 font-medium py-3 rounded-lg hover:bg-slate-50 transition-colors flex items-center justify-center gap-2">
+        <button 
+          type="button" 
+          onClick={handleGoogleAuth} 
+          disabled={isLoading}
+          className="w-full bg-white border border-slate-300 text-slate-700 font-medium py-3 rounded-lg hover:bg-slate-50 transition-colors flex items-center justify-center gap-2"
+        >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
@@ -50,7 +134,14 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         </button>
 
         <p className="text-center text-sm text-slate-600 mt-6">
-          Non hai un account? <a href="#" className="text-[#006e40] font-medium hover:underline">Registrati!</a>
+          {isRegistering ? 'Hai già un account? ' : 'Non hai un account? '}
+          <button 
+            type="button"
+            onClick={() => setIsRegistering(!isRegistering)}
+            className="text-[#006e40] font-medium hover:underline"
+          >
+            {isRegistering ? 'Accedi!' : 'Registrati!'}
+          </button>
         </p>
 
         <div className="mt-8 border-t border-slate-200 pt-6 text-center">
