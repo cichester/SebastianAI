@@ -76,7 +76,7 @@ Avvia l'applicazione in modalità locale:
 npm run dev
 ```
 
-L'app sarà ora accessibile nel browser, solitamente all'indirizzo `http://localhost:5173`.
+L'app sarà ora accessibile nel browser, solitamente all'indirizzo `http://localhost:3000`.
 
 ---
 
