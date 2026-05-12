@@ -365,11 +365,6 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
       const x_left = MARGIN;
       const x_right = MARGIN + COL_WIDTH + GAP;
 
-      const addFooter = (docInstance: any) => {
-        docInstance.setFontSize(9);
-        docInstance.setTextColor(120, 120, 120);
-        docInstance.text(`© ${new Date().getFullYear()} Sebastian AI - Educational worksheet`, MARGIN, A4_HEIGHT - 20);
-      };
 
       // 1. RENDERIZZA L'INTESTAZIONE
       if (manualHeaderRef.current) {
@@ -412,7 +407,6 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
              
              if (targetY + elH > PAGE_BOTTOM_THRESHOLD && targetY > MARGIN + 10) {
                // Non ci sta neanche a destra -> Nuova Pagina
-               addFooter(doc);
                doc.addPage();
                currentPage++;
                currentActiveCol = 'left';
@@ -438,7 +432,6 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
 
           if (currentYRight + elH > PAGE_BOTTOM_THRESHOLD && currentYRight > MARGIN + 10) {
             // Nuova Pagina
-            addFooter(doc);
             doc.addPage();
             currentPage++;
             currentActiveCol = 'left';
@@ -471,7 +464,6 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
         
         // Se non ci sta a tutta larghezza, nuova pagina
         if (currentYFull + elH > PAGE_BOTTOM_THRESHOLD && currentYFull > MARGIN + 50) {
-          addFooter(doc);
           doc.addPage();
           currentPage++;
           currentYFull = MARGIN;
@@ -481,16 +473,15 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
         currentYFull += (elH + 25);
       }
       
-      // Aggiunge footer all'ultima pagina
-      addFooter(doc);
 
-      // Post-produzione: Aggiunge numeri di pagina "X / Totale"
+
+      // Post-produzione: Aggiunge i numeri di pagina in fondo a destra
       const totalPages = doc.getNumberOfPages();
       for(let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
         doc.setFontSize(9);
         doc.setTextColor(120, 120, 120);
-        doc.text(`Pagina ${i} / ${totalPages}`, A4_WIDTH - MARGIN - 50, A4_HEIGHT - 20);
+        doc.text(`Pagina ${i} / ${totalPages}`, A4_WIDTH - MARGIN - 60, A4_HEIGHT - 20);
       }
 
       doc.save(`${activeQuiz.title || 'Quiz'}.pdf`);

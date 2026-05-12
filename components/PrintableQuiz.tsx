@@ -339,9 +339,8 @@ const PrintableQuiz: React.FC<PrintableQuizProps> = ({ quiz, language, pdfFormat
         ))}
       </div>
 
-      {/* Footer */}
-      <div className="mt-12 pt-4 border-t border-slate-300 text-[10px] text-slate-500 font-sans flex justify-between uppercase tracking-wider">
-        <span>© {new Date().getFullYear()} Sebastian AI - Educational worksheet</span>
+      {/* Footer con solo indicazione della pagina */}
+      <div className="mt-8 pt-4 border-t border-slate-300 text-[10px] text-slate-500 font-sans flex justify-end uppercase tracking-wider">
         <span>Pagina 1 / 1</span>
       </div>
     </div>
