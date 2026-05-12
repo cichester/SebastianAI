@@ -1,11 +1,13 @@
 
 import React, { useMemo, useState, useRef } from 'react';
 import html2pdf from 'html2pdf.js';
-import type { Quiz, Question, QuestionOption, ReadingSection, WritingPrompt, ListeningSection, PdfFormat } from '../types';
-import { QuestionType } from '../types';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
+import type { Quiz, Question, QuestionOption, ReadingSection, WritingPrompt, ListeningSection } from '../types';
+import { QuestionType, PdfFormat } from '../types';
 import { CheckIcon, SparklesIcon, SpeakerWaveIcon, PrinterIcon } from './icons';
 import LoadingSpinner from './LoadingSpinner';
-import PrintableQuiz from './PrintableQuiz';
+import PrintableQuiz, { PrintableHeader, PrintableExerciseItem, PrintableWritingItem, PrintableExHeader, PrintableReadingText, PrintableListeningText, PrintableQuestionItem } from './PrintableQuiz';
 import { generateDocx } from '../utils/docxGenerator';
 
 interface QuizPreviewProps {
@@ -328,12 +330,189 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
   const [isPrinting, setIsPrinting] = useState(false);
   const [isGeneratingDocx, setIsGeneratingDocx] = useState(false);
 
+  // Refs per la composizione manuale del PDF (Approccio 1)
+  const manualHeaderRef = useRef<HTMLDivElement>(null);
+  const manualItemsRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const manualWritingRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  const handlePrintClassicManual = async () => {
+    if (!activeQuiz) return;
+    setIsPrinting(true);
+    
+    try {
+      // Misure esatte per A4 @ 96 DPI (1px ≈ 1/96 pollice)
+      // A4: 210mm x 297mm -> 794px x 1123px
+      const A4_WIDTH = 794;
+      const A4_HEIGHT = 1123;
+      const MARGIN = 40;
+      const COL_WIDTH = 340;
+      const GAP = 34;
+      const FOOTER_SPACE = 35;
+      const PAGE_BOTTOM_THRESHOLD = A4_HEIGHT - MARGIN - FOOTER_SPACE;
+      
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'px',
+        format: [A4_WIDTH, A4_HEIGHT],
+        hotfixes: ["px_scaling"]
+      });
+      
+      let currentPage = 1;
+      let currentYLeft = MARGIN;
+      let currentYRight = MARGIN;
+      let currentActiveCol: 'left' | 'right' = 'left';
+      
+      const x_left = MARGIN;
+      const x_right = MARGIN + COL_WIDTH + GAP;
+
+      const addFooter = (docInstance: any) => {
+        docInstance.setFontSize(9);
+        docInstance.setTextColor(120, 120, 120);
+        docInstance.text(`© ${new Date().getFullYear()} Sebastian AI - Educational worksheet`, MARGIN, A4_HEIGHT - 20);
+      };
+
+      // 1. RENDERIZZA L'INTESTAZIONE
+      if (manualHeaderRef.current) {
+        const canvas = await html2canvas(manualHeaderRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        const headerH = manualHeaderRef.current.offsetHeight;
+        doc.addImage(imgData, 'JPEG', MARGIN, MARGIN, 714, headerH);
+        currentYLeft = MARGIN + headerH + 25;
+        currentYRight = MARGIN + headerH + 25;
+      }
+
+      // 2. RENDERIZZA GLI ELEMENTI GRANULARI UNO PER UNO
+      for (let i = 0; i < manualItemsRefs.current.length; i++) {
+        const el = manualItemsRefs.current[i];
+        if (!el) continue;
+
+        const unit = pdfUnits[i];
+        const isHeader = unit?.type === 'header';
+        // Aggiunge un po' di respiro solo prima dei nuovi esercizi
+        const verticalGap = isHeader ? 12 : 0; 
+
+        const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        const elH = el.offsetHeight;
+        
+        let targetX = x_left;
+        let targetY = currentYLeft;
+
+        if (currentActiveCol === 'left') {
+          // Aggiunge il gap verticale PRIMA del calcolo per l'header
+          if (isHeader) currentYLeft += verticalGap;
+
+          // Se l'elemento non entra in colonna sinistra (e non siamo a inizio pagina vuota)
+          if (currentYLeft + elH > PAGE_BOTTOM_THRESHOLD && currentYLeft > MARGIN + 10) {
+             // Passa alla colonna destra
+             currentActiveCol = 'right';
+             targetX = x_right;
+             // Allinea il top della colonna destra con quello della sinistra se stiamo partendo dalla prima pagina post-header
+             targetY = currentYRight + (isHeader ? verticalGap : 0);
+             
+             if (targetY + elH > PAGE_BOTTOM_THRESHOLD && targetY > MARGIN + 10) {
+               // Non ci sta neanche a destra -> Nuova Pagina
+               addFooter(doc);
+               doc.addPage();
+               currentPage++;
+               currentActiveCol = 'left';
+               currentYLeft = MARGIN;
+               currentYRight = MARGIN;
+               targetX = x_left;
+               targetY = currentYLeft;
+               currentYLeft += elH;
+             } else {
+               // Entra a destra
+               currentYRight = targetY + elH;
+               targetY = targetY; // maintain coordinate
+             }
+          } else {
+            // Entra a sinistra
+            targetX = x_left;
+            targetY = currentYLeft;
+            currentYLeft += elH;
+          }
+        } else {
+          // Colonna destra attiva
+          if (isHeader) currentYRight += verticalGap;
+
+          if (currentYRight + elH > PAGE_BOTTOM_THRESHOLD && currentYRight > MARGIN + 10) {
+            // Nuova Pagina
+            addFooter(doc);
+            doc.addPage();
+            currentPage++;
+            currentActiveCol = 'left';
+            currentYLeft = MARGIN;
+            currentYRight = MARGIN;
+            targetX = x_left;
+            targetY = currentYLeft;
+            currentYLeft += elH;
+          } else {
+            targetX = x_right;
+            targetY = currentYRight;
+            currentYRight += elH;
+          }
+        }
+        
+        doc.addImage(imgData, 'JPEG', targetX, targetY, COL_WIDTH, elH);
+      }
+
+      // 3. WRITING PROMPTS (A tutta larghezza sul fondo)
+      // Determina Y di partenza come il MASSIMO delle due colonne
+      let currentYFull = Math.max(currentYLeft, currentYRight);
+
+      for (let i = 0; i < manualWritingRefs.current.length; i++) {
+        const el = manualWritingRefs.current[i];
+        if (!el) continue;
+        
+        const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        const elH = el.offsetHeight;
+        
+        // Se non ci sta a tutta larghezza, nuova pagina
+        if (currentYFull + elH > PAGE_BOTTOM_THRESHOLD && currentYFull > MARGIN + 50) {
+          addFooter(doc);
+          doc.addPage();
+          currentPage++;
+          currentYFull = MARGIN;
+        }
+        
+        doc.addImage(imgData, 'JPEG', MARGIN, currentYFull, 714, elH);
+        currentYFull += (elH + 25);
+      }
+      
+      // Aggiunge footer all'ultima pagina
+      addFooter(doc);
+
+      // Post-produzione: Aggiunge numeri di pagina "X / Totale"
+      const totalPages = doc.getNumberOfPages();
+      for(let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(9);
+        doc.setTextColor(120, 120, 120);
+        doc.text(`Pagina ${i} / ${totalPages}`, A4_WIDTH - MARGIN - 50, A4_HEIGHT - 20);
+      }
+
+      doc.save(`${activeQuiz.title || 'Quiz'}.pdf`);
+    } catch (err) {
+      console.error("Error processing manual PDF composition:", err);
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
   const handlePrint = async () => {
     if (!pdfContainerRef.current) return;
     
+    // Usa la composizione manuale SE il formato è CLASSIC (Approccio 1)
+    if (pdfFormat === PdfFormat.CLASSIC) {
+       await handlePrintClassicManual();
+       return;
+    }
+
+    // Altrimenti mantieni l'html2pdf classico
     setIsPrinting(true);
     
-    // Create a clone of the element to modify for printing
     const element = pdfContainerRef.current;
     
     const opt = {
@@ -341,8 +520,7 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
       filename:     `${quizzes[activeTab]?.title || 'Quiz'}.pdf`,
       image:        { type: 'jpeg' as const, quality: 0.98 },
       html2canvas:  { scale: 2, useCORS: true, windowWidth: 1024 },
-      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
-      pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] as any }
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
     };
 
     try {
@@ -369,7 +547,7 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
   const activeQuiz = quizzes[activeTab];
 
   const groupedQuestions = useMemo(() => {
-    if (!activeQuiz) return {};
+    if (!activeQuiz) return {} as Record<string, { topic: string; type: string; questions: { q: Question; originalIndex: number }[] }>;
     return activeQuiz.questions.reduce((acc, question, index) => {
       const topic = question.topic || 'Senza Argomento';
       const type = getQuestionTypeName(question.questionType);
@@ -384,7 +562,55 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
 
   if (!activeQuiz) return null;
 
-  const sections = Object.values(groupedQuestions);
+  const sections: { topic: string; type: string; questions: { q: Question; originalIndex: number }[] }[] = Object.values(groupedQuestions);
+
+  const allItems = useMemo(() => {
+    if (!activeQuiz) return [];
+    const rawSections = sections.map(sec => ({
+        ...sec,
+        questions: sec.questions.map(qData => qData.q)
+    }));
+    const rawItems = [
+      ...(activeQuiz.listeningSections || []).map((s, idx) => ({ kind: 'listening' as const, data: s, idx })),
+      ...(activeQuiz.readingSections || []).map((s, idx) => ({ kind: 'reading' as const, data: s, idx })),
+      ...rawSections.map((s: any, idx) => ({ kind: 'standard' as const, data: s, idx }))
+    ];
+    return rawItems.map((item, i) => ({
+      ...item,
+      displayNum: i + 1
+    }));
+  }, [activeQuiz, sections]);
+  const pdfUnits = useMemo(() => {
+    const units: any[] = [];
+    allItems.forEach((item: any) => {
+      // 1. Aggiunge Header Esercizio
+      let title = "";
+      let descKey = "";
+      if (item.kind === 'listening') { title = `Listening Comprehension (${item.data.topic})`; descKey = "Listening"; }
+      else if (item.kind === 'reading') { title = `Reading Comprehension (${item.data.topic})`; descKey = "Reading"; }
+      else { title = `${item.data.type} (${item.data.topic})`; descKey = item.data.type; }
+
+      units.push({ type: 'header', data: { title, descKey, displayNum: item.displayNum } });
+      
+      // 2. Aggiunge il Testo (Reading o Listening)
+      if (item.kind === 'listening') {
+        units.push({ type: 'listening_text', text: item.data.text });
+      } else if (item.kind === 'reading') {
+        units.push({ type: 'reading_text', text: item.data.text });
+      }
+
+      // 3. Aggiunge ogni singola domanda
+      if (item.data && item.data.questions) {
+        item.data.questions.forEach((q: any, qIdx: number) => {
+          units.push({ type: 'question', data: { question: q, qIdx } });
+        });
+      }
+    });
+    return units;
+  }, [allItems]);
+
+  const writingStartNum = allItems.length + 1;
+
   const isAnyActionInProgress = isCreating || !!isRegeneratingId;
 
   const handleQuestionUpdate = (qIndex: number, updatedQ: Question) => {
@@ -630,6 +856,39 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
         <div ref={pdfContainerRef}>
           <PrintableQuiz quiz={activeQuiz} language={language} pdfFormat={pdfFormat} />
         </div>
+      </div>
+
+      {/* DOM hidden specific for manual PDF measurement (Approach 1) */}
+      {/* Usiamo box-sizing border-box e larghezza fissa per garantire misurazioni accurate */}
+      <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: '794px', backgroundColor: '#ffffff', color: '#000000' }}>
+        <div ref={manualHeaderRef} style={{ width: '714px', boxSizing: 'border-box', padding: '10px' }}>
+           <PrintableHeader quiz={activeQuiz} language={language} pdfFormat={pdfFormat} />
+        </div>
+        
+        {pdfUnits.map((unit: any, idx: number) => (
+          <div 
+            key={`m-unit-${idx}`} 
+            ref={el => { if(el) manualItemsRefs.current[idx] = el; }}
+            style={{ width: '340px', boxSizing: 'border-box', padding: '2px 8px', backgroundColor: '#ffffff' }} 
+            className={pdfFormat === PdfFormat.CLASSIC ? 'font-serif' : 'font-sans'}
+          >
+            {unit.type === 'header' && <div className="mt-2"><PrintableExHeader title={unit.data.title} descKey={unit.data.descKey} displayNum={unit.data.displayNum} pdfFormat={pdfFormat} /></div>}
+            {unit.type === 'reading_text' && <PrintableReadingText text={unit.text} pdfFormat={pdfFormat} />}
+            {unit.type === 'listening_text' && <PrintableListeningText text={unit.text} pdfFormat={pdfFormat} />}
+            {unit.type === 'question' && <PrintableQuestionItem question={unit.data.question} qIdx={unit.data.qIdx} pdfFormat={pdfFormat} />}
+          </div>
+        ))}
+
+        {activeQuiz.writingPrompts?.map((prompt, idx) => (
+          <div 
+            key={`m-write-${idx}`}
+            ref={el => { if(el) manualWritingRefs.current[idx] = el; }}
+            style={{ width: '714px', boxSizing: 'border-box', padding: '8px', backgroundColor: '#ffffff' }}
+            className={pdfFormat === PdfFormat.CLASSIC ? 'font-serif' : 'font-sans'}
+          >
+             <PrintableWritingItem prompt={prompt} idx={idx} displayNum={writingStartNum + idx} pdfFormat={pdfFormat} />
+          </div>
+        ))}
       </div>
     </div>
   );

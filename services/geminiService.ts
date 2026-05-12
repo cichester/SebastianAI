@@ -189,7 +189,7 @@ function buildPrompt(params: QuizGenerationParams, versionLabel: string): string
     - **IMPORTANTE PER "Vero/Falso":** Quando generi domande Vero/Falso, devi usare obbligatoriamente solo e soltanto 2 opzioni nell'array options: "Vero" e "Falso".
     - **IMPORTANTE PER "FILL IN THE BLANK":** Se la domanda richiede la coniugazione di un verbo, devi inserire il verbo all'infinito tra parentesi subito dopo lo spazio vuoto. Esempio: "She ___ (to go) home." oppure "If I ___ (to be) you...".
     - Formula le domande, i testi e le tracce in ${params.language}. Le istruzioni generali o le frasi di partenza per gli esercizi di traduzione devono essere in italiano, dato che gli studenti sono di madrelingua italiana.
-    - Genera un titolo generale per il quiz che rifletta tutti gli argomenti trattati.
+    - Genera un titolo generale per il quiz che rifletta tutti gli argomenti trattati. IMPORTANTE: NON includere MAI "Fila A/B" o la versione del compito nel titolo, verrà aggiunto automaticamente dal sistema.
   `;
 }
 
@@ -322,7 +322,6 @@ export async function generateQuizzes(
       }
 
       quizData.versionLabel = versionLabel;
-      quizData.title = `${quizData.title} - Fila ${versionLabel}`;
 
       const listeningSections = quizData.listeningSections || [];
       

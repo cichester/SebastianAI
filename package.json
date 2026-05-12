@@ -21,8 +21,11 @@
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "@types/html2canvas": "^0.5.35",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }
