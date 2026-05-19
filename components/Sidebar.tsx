@@ -3,8 +3,8 @@ import { SunIcon, MoonIcon } from './icons';
 
 interface SidebarProps {
   user?: { displayName?: string | null; email?: string | null };
-  currentView: 'dashboard' | 'create' | 'settings';
-  setCurrentView: (view: 'dashboard' | 'create' | 'settings') => void;
+  currentView: 'welcome' | 'dashboard' | 'create' | 'settings';
+  setCurrentView: (view: 'welcome' | 'dashboard' | 'create' | 'settings') => void;
   onLogout: () => void;
   onOpenSettings: () => void;
   onOpenSupport: () => void;
@@ -17,7 +17,12 @@ const Sidebar: React.FC<SidebarProps> = ({ user, currentView, setCurrentView, on
     <aside className="fixed inset-y-0 left-0 w-64 bg-[#1e293b] dark:bg-[#0f172a] text-white flex flex-col justify-between print:hidden transition-colors border-r border-slate-800/50">
       <div>
         <div className="p-6 pb-8">
-          <h1 className="text-xl font-bold tracking-tight text-white">Sebastian AI</h1>
+          <h1 
+            onClick={() => setCurrentView('welcome')} 
+            className="text-xl font-bold tracking-tight text-white cursor-pointer hover:text-emerald-400 transition-colors"
+          >
+            Sebastian AI
+          </h1>
           <p className="text-xs font-semibold text-emerald-400 uppercase tracking-widest mt-1">
             {user?.displayName || user?.email || 'Docente'}
           </p>

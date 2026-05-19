@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type, Modality } from "@google/genai";
-import type { Quiz, QuizGenerationParams, TopicRequest, Question, ReadingSection, ListeningSection } from '../types';
+import type { Quiz, QuizGenerationParams, TopicRequest, Question, ReadingSection, ListeningSection, WritingPrompt } from '../types';
 
 const questionSchema = {
   type: Type.OBJECT,
@@ -39,13 +39,13 @@ const questionSchema = {
 };
 
 const readingSectionSchema = {
-    type: Type.OBJECT,
-    properties: {
-      topic: { type: Type.STRING, description: "L'argomento della sezione di lettura." },
-      text: { type: Type.STRING, description: "Il testo generato o fornito per la lettura." },
-      questions: { type: Type.ARRAY, items: questionSchema, description: "Domande (di solito a scelta multipla o risposta breve) basate SUL TESTO fornito."}
-    },
-    required: ['topic', 'text', 'questions']
+  type: Type.OBJECT,
+  properties: {
+    topic: { type: Type.STRING, description: "L'argomento della sezione di lettura." },
+    text: { type: Type.STRING, description: "Il testo generato o fornito per la lettura." },
+    questions: { type: Type.ARRAY, items: questionSchema, description: "Domande (di solito a scelta multipla o risposta breve) basate SUL TESTO fornito." }
+  },
+  required: ['topic', 'text', 'questions']
 };
 
 const listeningSectionSchema = {
@@ -76,17 +76,17 @@ const quizSchema = {
       items: readingSectionSchema
     },
     writingPrompts: {
-        type: Type.ARRAY,
-        description: "Sezioni dedicate alla produzione scritta.",
-        items: {
-            type: Type.OBJECT,
-            properties: {
-                topic: { type: Type.STRING, description: "L'argomento della traccia di scrittura." },
-                promptText: { type: Type.STRING, description: "La traccia o la domanda per l'esercizio di scrittura." },
-                wordLimit: { type: Type.NUMBER, description: "Il limite di parole richiesto per la risposta." }
-            },
-            required: ['topic', 'promptText', 'wordLimit']
-        }
+      type: Type.ARRAY,
+      description: "Sezioni dedicate alla produzione scritta.",
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          topic: { type: Type.STRING, description: "L'argomento della traccia di scrittura." },
+          promptText: { type: Type.STRING, description: "La traccia o la domanda per l'esercizio di scrittura." },
+          wordLimit: { type: Type.NUMBER, description: "Il limite di parole richiesto per la risposta." }
+        },
+        required: ['topic', 'promptText', 'wordLimit']
+      }
     },
     listeningSections: {
       type: Type.ARRAY,
@@ -111,64 +111,68 @@ function buildPrompt(params: QuizGenerationParams, versionLabel: string): string
     const exerciseCounts = Object.entries(topic.exercises)
       .filter(([, count]) => count > 0)
       .map(([type, count]) => {
-          const enumString = getQuestionTypeEnumString(type);
-          let extra = '';
-          if (type.includes('Vero/Falso')) {
-              extra = ' con SOLO due opzioni: "Vero" e "Falso"';
-          }
-          return `- ${type} (usa il questionType "${enumString}"): ESATTAMENTE ${count} domande${extra}`;
+        const enumString = getQuestionTypeEnumString(type);
+        let extra = '';
+        if (type.includes('Vero/Falso')) {
+          extra = ' con SOLO due opzioni: "Vero" e "Falso"';
+        }
+        return `- ${type} (usa il questionType "${enumString}"): ESATTAMENTE ${count} domande${extra}`;
       })
       .join('\n');
-    
+
     let readingDetails = '';
     if (topic.reading.enabled) {
-        const readingExerciseCounts = Object.entries(topic.reading.exercises || {})
-            .filter(([, count]) => count > 0)
-            .map(([type, count]) => {
-                const enumString = getQuestionTypeEnumString(type);
-                return `- ${type} (usa il questionType "${enumString}"): ESATTAMENTE ${count} domande`;
-            })
-            .join('\n');
+      const readingExerciseCounts = Object.entries(topic.reading.exercises || {})
+        .filter(([, count]) => count > 0)
+        .map(([type, count]) => {
+          const enumString = getQuestionTypeEnumString(type);
+          return `- ${type} (usa il questionType "${enumString}"): ESATTAMENTE ${count} domande`;
+        })
+        .join('\n');
 
-        if (readingExerciseCounts) {
-            if (topic.reading.mode === 'custom' && topic.reading.customText.trim() !== '') {
-                readingDetails = `- Esercizio di Reading Comprehension basato su testo fornito:\n  - TESTO FORNITO:\n"""\n${topic.reading.customText}\n"""\n  - Basandoti ESCLUSIVAMENTE sul testo fornito qui sopra, crea le seguenti domande:\n${readingExerciseCounts.split('\n').map(l => `    ${l}`).join('\n')}`;
-            } else {
-                readingDetails = `- Esercizio di Reading Comprehension:\n  - Genera un testo di circa ${topic.reading.wordCount} parole.\n  - Basato sul testo, crea le seguenti domande:\n${readingExerciseCounts.split('\n').map(l => `    ${l}`).join('\n')}`;
-            }
+      if (readingExerciseCounts) {
+        if (topic.reading.mode === 'custom' && topic.reading.customText.trim() !== '') {
+          readingDetails = `- Esercizio di Reading Comprehension basato su testo fornito:\n  - TESTO FORNITO:\n"""\n${topic.reading.customText}\n"""\n  - Basandoti ESCLUSIVAMENTE sul testo fornito qui sopra, crea le seguenti domande:\n${readingExerciseCounts.split('\n').map(l => `    ${l}`).join('\n')}`;
+        } else {
+          readingDetails = `- Esercizio di Reading Comprehension:\n  - Genera un testo di circa ${topic.reading.wordCount} parole.\n  - Basato sul testo, crea le seguenti domande:\n${readingExerciseCounts.split('\n').map(l => `    ${l}`).join('\n')}`;
         }
+      }
     }
 
     let writingDetails = '';
     if (topic.writing.enabled && topic.writing.wordLimit > 0) {
-        writingDetails = `- 1 Esercizio di Writing: genera una traccia di scrittura con un limite di ${topic.writing.wordLimit} parole.`;
+      const numW = topic.writing.numQuestions || 1;
+      writingDetails = `- Esercizio di Writing: genera ESATTAMENTE ${numW} traccia/e di scrittura (ciascuna come oggetto separato nel vettore writingPrompts), ciascuna con un limite di ${topic.writing.wordLimit} parole.`;
+      if (topic.writing.directives) {
+        writingDetails += `\n  - Direttive speciali: ${topic.writing.directives}`;
+      }
     }
 
     let listeningDetails = '';
     if (topic.listening.enabled && topic.listening.durationSeconds > 0) {
-        const wordEstimate = Math.round((topic.listening.durationSeconds / 60) * 150); // 150 wpm
-        const listeningExerciseCounts = Object.entries(topic.listening.exercises || {})
-            .filter(([, count]) => count > 0)
-            .map(([type, count]) => {
-                const enumString = getQuestionTypeEnumString(type);
-                let extra = '';
-                if (type.includes('Vero/Falso')) {
-                    extra = ' con SOLO due opzioni: "Vero" e "Falso"';
-                }
-                return `- ${type} (usa il questionType "${enumString}"): ESATTAMENTE ${count} domande${extra}`;
-            })
-            .join('\n');
-        
-        if (listeningExerciseCounts) {
-            listeningDetails = `- Esercizio di Ascolto:\n  - Genera un testo (transcript) di circa ${wordEstimate} parole (per una durata audio di circa ${topic.listening.durationSeconds} secondi).\n  - Basato su questo testo, crea le seguenti domande:\n${listeningExerciseCounts.split('\n').map(l => `    ${l}`).join('\n')}`;
-        }
+      const wordEstimate = Math.round((topic.listening.durationSeconds / 60) * 150); // 150 wpm
+      const listeningExerciseCounts = Object.entries(topic.listening.exercises || {})
+        .filter(([, count]) => count > 0)
+        .map(([type, count]) => {
+          const enumString = getQuestionTypeEnumString(type);
+          let extra = '';
+          if (type.includes('Vero/Falso')) {
+            extra = ' con SOLO due opzioni: "Vero" e "Falso"';
+          }
+          return `- ${type} (usa il questionType "${enumString}"): ESATTAMENTE ${count} domande${extra}`;
+        })
+        .join('\n');
+
+      if (listeningExerciseCounts) {
+        listeningDetails = `- Esercizio di Ascolto:\n  - Genera un testo (transcript) di circa ${wordEstimate} parole (per una durata audio di circa ${topic.listening.durationSeconds} secondi).\n  - Basato su questo testo, crea le seguenti domande:\n${listeningExerciseCounts.split('\n').map(l => `    ${l}`).join('\n')}`;
+      }
     }
 
     const details = [exerciseCounts, readingDetails, writingDetails, listeningDetails].filter(Boolean).join('\n');
 
     return `**Argomento: "${topic.name}"**\nRichieste:\n${details}`;
   }).join('\n\n');
-  
+
   return `
     Crea un quiz di lingua ${params.language} per studenti.
 
@@ -194,72 +198,86 @@ function buildPrompt(params: QuizGenerationParams, versionLabel: string): string
 }
 
 async function makeApiCall(prompt: string, schema: object, signal?: AbortSignal): Promise<any> {
-    if (!process.env.GEMINI_API_KEY) {
-        throw new Error("API key non trovata. Assicurati che sia configurata nell'ambiente.");
-    }
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error("API key non trovata. Assicurati che sia configurata nell'ambiente.");
+  }
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const models = ["gemini-3-flash-preview", "gemini-2.5-pro", "gemini-2.5-flash"];
+  let lastError: any = null;
 
+  for (const model of models) {
+    if (signal?.aborted) {
+      const err = new Error('AbortError');
+      err.name = 'AbortError';
+      throw err;
+    }
     try {
-        const response = await ai.models.generateContent({
-            model: "gemini-3-flash-preview",
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: schema,
-                temperature: 0.7, // Increased slightly to ensure variance between versions
-            },
-            // @ts-ignore
-            signal: signal,
-        });
-        
-        const jsonText = response.text.trim();
-        return JSON.parse(jsonText);
+      console.log(`Tentativo di chiamata API con modello: ${model}`);
+      const response = await ai.models.generateContent({
+        model: model,
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: schema,
+          temperature: 0.7, // Increased slightly to ensure variance between versions
+        },
+        // @ts-ignore
+        signal: signal,
+      });
 
-    } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') {
-             console.log("Chiamata API annullata dall'utente.");
-             throw error;
-        }
-        console.error("Errore durante la chiamata all'API Gemini:", error);
-        throw new Error("Impossibile comunicare con l'API. Controlla la console per i dettagli.");
+      const jsonText = response.text.trim();
+      return JSON.parse(jsonText);
+
+    } catch (error: any) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log("Chiamata API annullata dall'utente.");
+        throw error;
+      }
+      console.warn(`Modello ${model} fallito con errore:`, error.message || error);
+      lastError = error;
+      // Procedi con il modello successivo nella lista
     }
+  }
+
+  console.error("Tutti i modelli Gemini sono falliti. Ultimo errore:", lastError);
+  throw new Error(lastError?.message || "Tutti i modelli della pipeline sono temporaneamente non disponibili.");
 }
 
 export async function generateSpeech(language: string, text: string, signal?: AbortSignal): Promise<string> {
-    if (!process.env.GEMINI_API_KEY) {
-        throw new Error("API key non trovata.");
-    }
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    
-    try {
-        const response = await ai.models.generateContent({
-            model: "gemini-3.1-flash-tts-preview",
-            contents: [{ parts: [{ text: `Say with a standard, clear tone for ${language} language learners: ${text}` }] }],
-            config: {
-                responseModalities: [Modality.AUDIO],
-                speechConfig: {
-                    voiceConfig: {
-                        prebuiltVoiceConfig: { voiceName: 'Kore' }, // Voce chiara e standard
-                    },
-                },
-            },
-            // @ts-ignore
-            signal: signal,
-        });
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error("API key non trovata.");
+  }
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-        const audioPart = response.candidates?.[0]?.content?.parts?.[0];
-        if (audioPart && audioPart.inlineData) {
-            return audioPart.inlineData.data;
-        }
-        throw new Error("Nessun dato audio ricevuto dall'API TTS.");
-    } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') {
-             console.log("Generazione audio annullata.");
-             throw error;
-        }
-        console.error("Errore durante la generazione dello speech:", error);
-        throw new Error("Impossibile generare l'audio.");
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3.1-flash-tts-preview",
+      contents: [{ parts: [{ text: `Say with a standard, clear tone for ${language} language learners: ${text}` }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: 'Kore' }, // Voce chiara e standard
+          },
+        },
+      },
+      // @ts-ignore
+      signal: signal,
+    });
+
+    const audioPart = response.candidates?.[0]?.content?.parts?.[0];
+    if (audioPart && audioPart.inlineData) {
+      return audioPart.inlineData.data;
     }
+    throw new Error("Nessun dato audio ricevuto dall'API TTS.");
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.log("Generazione audio annullata.");
+      throw error;
+    }
+    console.error("Errore durante la generazione dello speech:", error);
+    throw new Error("Impossibile generare l'audio.");
+  }
 }
 
 export interface GenerationProgress {
@@ -271,15 +289,15 @@ export interface GenerationProgress {
 }
 
 export async function generateQuizzes(
-  params: QuizGenerationParams, 
-  signal?: AbortSignal, 
+  params: QuizGenerationParams,
+  signal?: AbortSignal,
   onSpeechGenerationStart?: () => void,
   onProgress?: (progress: GenerationProgress) => void
 ): Promise<Quiz[]> {
   const versions = Array.from({ length: params.numVersions }, (_, i) => String.fromCharCode(65 + i));
   const results: Quiz[] = [];
   const numVersions = params.numVersions;
-  
+
   // Calculate total "work units" for progressive bar
   // Each version has: 1 (Prompt Building) + 5 (LLM Text Gen) + 1 (Audio Gen per listening section)
   const unitsPerVersion = 1 + 5 + params.topics.filter(t => t.listening.enabled).length;
@@ -300,62 +318,62 @@ export async function generateQuizzes(
   };
 
   for (let i = 0; i < versions.length; i++) {
-      const versionLabel = versions[i];
-      if (signal?.aborted) {
-          const err = new Error('AbortError');
-          err.name = 'AbortError';
-          throw err;
-      }
+    const versionLabel = versions[i];
+    if (signal?.aborted) {
+      const err = new Error('AbortError');
+      err.name = 'AbortError';
+      throw err;
+    }
 
-      // Phase 1: Build Prompt
-      updateProgress('text', `Inizializzazione Fila ${versionLabel}...`, 0, i);
-      const prompt = buildPrompt(params, versionLabel);
-      completedUnits += 1;
+    // Phase 1: Build Prompt
+    updateProgress('text', `Inizializzazione Fila ${versionLabel}...`, 0, i);
+    const prompt = buildPrompt(params, versionLabel);
+    completedUnits += 1;
 
-      // Phase 2: LLM Call
-      updateProgress('text', `Generazione Esercizi Fila ${versionLabel}...`, 2, i);
-      const quizData = await makeApiCall(prompt, quizSchema, signal);
-      completedUnits += 5;
+    // Phase 2: LLM Call
+    updateProgress('text', `Generazione Esercizi Fila ${versionLabel}...`, 2, i);
+    const quizData = await makeApiCall(prompt, quizSchema, signal);
+    completedUnits += 5;
 
-      if (!quizData.title || !Array.isArray(quizData.questions)) {
-        throw new Error(`Formato JSON testuale non valido per la Fila ${versionLabel}.`);
-      }
+    if (!quizData.title || !Array.isArray(quizData.questions)) {
+      throw new Error(`Formato JSON testuale non valido per la Fila ${versionLabel}.`);
+    }
 
-      quizData.versionLabel = versionLabel;
+    quizData.versionLabel = versionLabel;
 
-      const listeningSections = quizData.listeningSections || [];
-      
-      if (listeningSections.length > 0) {
-          if (onSpeechGenerationStart) onSpeechGenerationStart();
-          
-          for (let j = 0; j < listeningSections.length; j++) {
-              const section = listeningSections[j];
-              updateProgress('audio', `Creazione Audio Fila ${versionLabel} (${j+1}/${listeningSections.length})`, 0, i);
-              
-              if (section.text && !section.audioBase64) {
-                  if(signal?.aborted) {
-                      const err = new Error("Aborted");
-                      err.name = "AbortError";
-                      throw err;
-                  }
-                  section.audioBase64 = await generateSpeech(params.language, section.text, signal);
-              }
-              completedUnits += 1;
+    const listeningSections = quizData.listeningSections || [];
+
+    if (listeningSections.length > 0) {
+      if (onSpeechGenerationStart) onSpeechGenerationStart();
+
+      for (let j = 0; j < listeningSections.length; j++) {
+        const section = listeningSections[j];
+        updateProgress('audio', `Creazione Audio Fila ${versionLabel} (${j + 1}/${listeningSections.length})`, 0, i);
+
+        if (section.text && !section.audioBase64) {
+          if (signal?.aborted) {
+            const err = new Error("Aborted");
+            err.name = "AbortError";
+            throw err;
           }
+          section.audioBase64 = await generateSpeech(params.language, section.text, signal);
+        }
+        completedUnits += 1;
       }
-      
-      results.push(quizData as Quiz);
-      
-      // Final update for this version if no audio was generated
-      if (listeningSections.length === 0) {
-        updateProgress('text', `Fila ${versionLabel} completata`, 0, i);
-      } else {
-        updateProgress('audio', `Fila ${versionLabel} completata`, 0, i);
-      }
-      
-      if (versionLabel !== versions[versions.length - 1]) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-      }
+    }
+
+    results.push(quizData as Quiz);
+
+    // Final update for this version if no audio was generated
+    if (listeningSections.length === 0) {
+      updateProgress('text', `Fila ${versionLabel} completata`, 0, i);
+    } else {
+      updateProgress('audio', `Fila ${versionLabel} completata`, 0, i);
+    }
+
+    if (versionLabel !== versions[versions.length - 1]) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
   }
 
   if (onProgress) onProgress({ percentage: 100, message: 'Processo completato!', currentVersion: numVersions, totalVersions: numVersions });
@@ -365,12 +383,12 @@ export async function generateQuizzes(
 // Keep the old name for backward compatibility or refactor App to use generateQuizzes
 // but App.tsx calls generateQuiz. Let's redirect.
 export async function generateQuiz(
-  params: QuizGenerationParams, 
-  signal?: AbortSignal, 
+  params: QuizGenerationParams,
+  signal?: AbortSignal,
   onSpeechGenerationStart?: () => void,
   onProgress?: (progress: GenerationProgress) => void
 ): Promise<Quiz[]> {
-    return generateQuizzes(params, signal, onSpeechGenerationStart, onProgress);
+  return generateQuizzes(params, signal, onSpeechGenerationStart, onProgress);
 }
 
 export async function regenerateQuestions(language: string, level: string, topic: string, questionType: string, count: number, signal?: AbortSignal): Promise<Question[]> {
@@ -379,7 +397,7 @@ export async function regenerateQuestions(language: string, level: string, topic
     type: Type.ARRAY,
     items: questionSchema,
   };
-  
+
   const questionTypeEnum = getQuestionTypeEnumString(questionType);
 
   let prompt = `
@@ -394,55 +412,35 @@ export async function regenerateQuestions(language: string, level: string, topic
     - Per 'Fill in the blank': Se la domanda richiede la coniugazione di un verbo, devi inserire il verbo all'infinito tra parentesi subito dopo lo spazio vuoto. Esempio: "She ___ (to go) home."
     - Le istruzioni generali o le frasi di partenza per gli esercizi di traduzione devono essere in italiano, dato che gli studenti sono di madrelingua italiana.
   `;
-
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-  try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: arraySchema,
-        },
-        // @ts-ignore
-        signal: signal
-    });
-
-    const jsonText = response.text.trim();
-    return JSON.parse(jsonText);
-  } catch(error) {
-     if (error instanceof Error && error.name === 'AbortError') throw error;
-     console.error("Errore rigenerazione domande:", error);
-     throw new Error("Impossibile rigenerare le domande.");
-  }
+  return await makeApiCall(prompt, arraySchema, signal);
 }
 
 export async function regenerateComplexSection(
-    language: string,
-    level: string, 
-    topic: string, 
-    sectionType: 'reading' | 'listening', 
-    config: TopicRequest['reading'] | TopicRequest['listening'], 
-    signal?: AbortSignal
+  language: string,
+  level: string,
+  topic: string,
+  sectionType: 'reading' | 'listening',
+  config: TopicRequest['reading'] | TopicRequest['listening'],
+  signal?: AbortSignal
 ): Promise<ReadingSection | ListeningSection> {
-    
-    let exercisesDetails = '';
-    const exerciseCounts = Object.entries(config.exercises || {})
+
+  let exercisesDetails = '';
+  const exerciseCounts = Object.entries(config.exercises || {})
     .filter(([, count]) => count > 0)
     .map(([type, count]) => {
-        const enumString = getQuestionTypeEnumString(type);
-        return `- ${type} (usa il questionType "${enumString}"): ESATTAMENTE ${count} domande`;
+      const enumString = getQuestionTypeEnumString(type);
+      return `- ${type} (usa il questionType "${enumString}"): ESATTAMENTE ${count} domande`;
     })
     .join('\n');
 
-    let prompt = '';
-    let schema = {};
+  let prompt = '';
+  let schema = {};
 
-    if (sectionType === 'reading') {
-        const readConfig = config as TopicRequest['reading'];
-        schema = readingSectionSchema;
-        if (readConfig.mode === 'custom' && readConfig.customText) {
-             prompt = `
+  if (sectionType === 'reading') {
+    const readConfig = config as TopicRequest['reading'];
+    schema = readingSectionSchema;
+    if (readConfig.mode === 'custom' && readConfig.customText) {
+      prompt = `
                 Crea un esercizio di Reading Comprehension in ${language}.
                 **Argomento:** ${topic}
                 **Livello:** ${level}
@@ -455,8 +453,8 @@ export async function regenerateComplexSection(
                 
                 IMPORTANTE: Le istruzioni generali o le frasi di partenza per gli esercizi di traduzione devono essere in italiano, dato che gli studenti sono di madrelingua italiana.
              `;
-        } else {
-             prompt = `
+    } else {
+      prompt = `
                 Crea un esercizio di Reading Comprehension in ${language}.
                 **Argomento:** ${topic}
                 **Livello:** ${level}
@@ -466,11 +464,11 @@ export async function regenerateComplexSection(
                 
                 IMPORTANTE: Le istruzioni generali o le frasi di partenza per gli esercizi di traduzione devono essere in italiano, dato che gli studenti sono di madrelingua italiana.
              `;
-        }
-    } else {
-        const listenConfig = config as TopicRequest['listening'];
-        schema = listeningSectionSchema;
-         prompt = `
+    }
+  } else {
+    const listenConfig = config as TopicRequest['listening'];
+    schema = listeningSectionSchema;
+    prompt = `
             Crea un esercizio di Ascolto (Listening) in ${language}.
             **Argomento:** ${topic}
             **Livello:** ${level}
@@ -480,13 +478,45 @@ export async function regenerateComplexSection(
             
             IMPORTANTE: Le istruzioni generali o le frasi di partenza per gli esercizi di traduzione devono essere in italiano, dato che gli studenti sono di madrelingua italiana.
          `;
-    }
+  }
 
-    const data = await makeApiCall(prompt, schema, signal);
-    
-    if (sectionType === 'listening' && data.text) {
-         data.audioBase64 = await generateSpeech(language, data.text, signal);
-    }
-    
-    return data;
+  const data = await makeApiCall(prompt, schema, signal);
+
+  if (sectionType === 'listening' && data.text) {
+    data.audioBase64 = await generateSpeech(language, data.text, signal);
+  }
+
+  return data;
+}
+
+export async function regenerateWritingPrompt(
+  language: string,
+  level: string,
+  topic: string,
+  config: TopicRequest['writing'],
+  signal?: AbortSignal
+): Promise<WritingPrompt> {
+  const wDirectives = config.directives ? ` basandosi rigorosamente sulle seguenti direttive IA dell'utente: "${config.directives}"` : '';
+  const prompt = `
+        Crea un singolo esercizio di produzione scritta (Writing) in ${language}.
+        **Argomento:** ${topic}
+        **Livello:** ${level}
+        **Limite di parole:** ${config.wordLimit} parole${wDirectives}
+
+        Genera una traccia di scrittura coinvolgente ed educativa adatta al livello e argomento specificati.
+        
+        **REGOLA TASSATIVA PER LE CONSEGNE (ISTRUZIONI):** La consegna (l'istruzione dell'esercizio di scrittura, es. "Scrivi un testo su...") deve essere scritta **SEMPRE nella lingua del compito (${language})**, mai in italiano o altre lingue.
+    `;
+  const schema = {
+    type: Type.OBJECT,
+    properties: {
+      topic: { type: Type.STRING, description: "L'argomento della traccia di scrittura." },
+      promptText: { type: Type.STRING, description: "La traccia o la domanda per l'esercizio di scrittura." },
+      wordLimit: { type: Type.NUMBER, description: "Il limite di parole richiesto per la risposta." }
+    },
+    required: ['topic', 'promptText', 'wordLimit']
+  };
+
+  const data = await makeApiCall(prompt, schema, signal);
+  return data;
 }

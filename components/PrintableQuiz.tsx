@@ -198,7 +198,14 @@ export const PrintableQuestionItem: React.FC<{ question: Question; qIdx: number;
           ))}
         </div>
       )}
-      {(question.questionType === QuestionType.FILL_IN_THE_BLANK || question.questionType === QuestionType.SHORT_ANSWER || question.questionType === QuestionType.TRANSLATION) && (
+      {question.questionType === QuestionType.TRANSLATION && (
+        pdfFormat === PdfFormat.MODERN ? (
+          <div className="mt-6 border-b border-indigo-300 border-dashed w-full h-8"></div>
+        ) : (
+          <div className="mt-4 border-b border-black border-dashed w-full h-6"></div>
+        )
+      )}
+      {(question.questionType === QuestionType.FILL_IN_THE_BLANK || question.questionType === QuestionType.SHORT_ANSWER) && (
         <div className="mt-2 border-b border-black border-dashed w-full h-4"></div>
       )}
     </div>

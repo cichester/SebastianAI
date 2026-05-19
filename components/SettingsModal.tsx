@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ClipboardIcon, CheckIcon, XMarkIcon } from './icons';
 import { PdfFormat } from '../types';
+import { auth, googleProvider } from '../services/firebase';
+import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 
 interface SettingsModalProps {
     currentUrl: string | null;
@@ -313,6 +315,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentUrl, currentPdfFor
     const handleSave = () => {
         onSave(''); // We don't need to save the URL anymore
     };
+
+    const handleGoogleConnect = async () => {
+        try {
+            const result = await signInWithPopup(auth, googleProvider);
+            const credential = GoogleAuthProvider.credentialFromResult(result);
+            if (credential?.accessToken) {
+                localStorage.setItem('googleAccessToken', credential.accessToken);
+                console.log('Token Google OAuth collegato con successo tramite popup Firebase');
+                window.location.reload();
+            }
+        } catch (error: any) {
+            console.error("Errore durante la connessione con Google:", error);
+            alert("Errore durante la connessione con Google: " + error.message);
+        }
+    };
     
     useEffect(() => {
         const handleEsc = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
@@ -400,8 +417,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentUrl, currentPdfFor
                                 </button>
                             </div>
                         ) : (
-                            <a 
-                                href={(import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001') + '/auth/google'}
+                            <button 
+                                onClick={handleGoogleConnect}
                                 className="inline-flex items-center justify-center px-6 py-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition w-full md:w-auto"
                             >
                                 <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24">
@@ -412,7 +429,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentUrl, currentPdfFor
                                     <path fill="none" d="M1 1h22v22H1z" />
                                 </svg>
                                 <span className="font-semibold text-slate-700 dark:text-slate-200">Accedi con Google</span>
-                            </a>
+                            </button>
                         )}
                     </div>
                 </div>

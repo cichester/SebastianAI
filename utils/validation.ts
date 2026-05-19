@@ -1,5 +1,5 @@
 
-import type { Quiz, QuizGenerationParams, Question, TopicRequest, ReadingSection, ListeningSection } from '../types';
+import type { Quiz, QuizGenerationParams, Question, TopicRequest, ReadingSection, ListeningSection, WritingPrompt } from '../types';
 import { QuestionType } from '../types';
 
 interface ValidationResult {
@@ -155,14 +155,16 @@ export const validateQuizDraft = (quiz: Quiz, params: QuizGenerationParams): Val
 
       // Controlla la sezione di Scrittura
       if (topic.writing.enabled) {
-          const writingPrompt = (quiz.writingPrompts || []).find(wp => wp.topic === topic.name);
-           if (!writingPrompt) {
-              errors.push(`Argomento "${topic.name}": sezione di scrittura richiesta ma non trovata.`);
-          } else {
-              if (!writingPrompt.promptText || writingPrompt.promptText.trim().length < 10) {
-                   errors.push(`Argomento "${topic.name}": la traccia della sezione di scrittura sembra troppo corta o mancante.`);
-              }
+          const expectedCount = topic.writing.numQuestions || 1;
+          const writingPrompts = (quiz.writingPrompts || []).filter(wp => wp.topic === topic.name);
+          if (writingPrompts.length !== expectedCount) {
+              errors.push(`Argomento "${topic.name}": attese ${expectedCount} tracce di scrittura, ma ne sono state trovate ${writingPrompts.length}.`);
           }
+          writingPrompts.forEach((wp, wpIdx) => {
+              if (!wp.promptText || wp.promptText.trim().length < 10) {
+                   errors.push(`Argomento "${topic.name}", traccia ${wpIdx + 1}: la traccia della sezione di scrittura sembra troppo corta o mancante.`);
+              }
+          });
       }
   });
 
@@ -240,6 +242,26 @@ export const validateRegeneratedComplexSection = (
         if (!listeningSection.audioBase64 || listeningSection.audioBase64.trim() === '') {
             errors.push("L'audio per la sezione di ascolto non è stato generato correttamente.");
         }
+    }
+    
+    return { isValid: errors.length === 0, errors };
+};
+
+/**
+ * Valida un esercizio di scrittura (writing) appena rigenerato.
+ */
+export const validateRegeneratedWritingPrompt = (
+  prompt: WritingPrompt,
+  config: TopicRequest['writing']
+): ValidationResult => {
+    const errors: string[] = [];
+
+    if (!prompt) {
+        errors.push("La traccia rigenerata è vuota o non valida.");
+        return { isValid: false, errors };
+    }
+    if (!prompt.promptText || prompt.promptText.trim().length < 10) {
+        errors.push("La traccia della sezione di scrittura sembra troppo corta o mancante.");
     }
     
     return { isValid: errors.length === 0, errors };

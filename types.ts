@@ -57,21 +57,31 @@ export interface TopicRequest {
   id: string; // Per le chiavi di React
   name: string;
   exercises: Record<string, number>;
+  combinedExercise?: {
+    enabled: boolean;
+    type1: string;
+    type2: string;
+    count: number;
+  };
   reading: {
     enabled: boolean;
     mode: 'generate' | 'custom';
     customText: string;
     wordCount: number;
     exercises: Record<string, number>;
+    directives?: string; // Direttive speciali per l'IA
   };
   writing: {
     enabled: boolean;
     wordLimit: number;
+    numQuestions?: number;
+    directives?: string; // Direttive speciali per l'IA
   };
   listening: {
     enabled: boolean;
     durationSeconds: number;
     exercises: Record<string, number>;
+    directives?: string; // Direttive speciali per l'IA
   };
 }
 

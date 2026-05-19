@@ -18,9 +18,15 @@ const createNewTopic = (): TopicRequest => ({
     'Risposta Breve': 0,
     'Traduzione': 0,
   },
-  reading: { enabled: false, mode: 'generate', customText: '', wordCount: 150, exercises: { 'Scelta Multipla': 5 } },
-  writing: { enabled: false, wordLimit: 100 },
-  listening: { enabled: false, durationSeconds: 60, exercises: { 'Scelta Multipla': 5 } },
+  combinedExercise: {
+    enabled: false,
+    type1: 'Completa gli Spazi',
+    type2: 'Traduzione',
+    count: 0
+  },
+  reading: { enabled: false, mode: 'generate', customText: '', wordCount: 150, exercises: { 'Scelta Multipla': 5 }, directives: '' },
+  writing: { enabled: false, wordLimit: 100, numQuestions: 1, directives: '' },
+  listening: { enabled: false, durationSeconds: 60, exercises: { 'Scelta Multipla': 5 }, directives: '' },
 });
 
 const QuizInputForm: React.FC<QuizInputFormProps> = ({ onGenerate, isLoading }) => {
@@ -53,9 +59,15 @@ const QuizInputForm: React.FC<QuizInputFormProps> = ({ onGenerate, isLoading }) 
         'Risposta Breve': 0,
         'Traduzione': 0,
       },
-      reading: { enabled: true, mode: 'generate', customText: '', wordCount: 150, exercises: { 'Scelta Multipla': 3 } },
-      listening: { enabled: false, durationSeconds: 60, exercises: { 'Scelta Multipla': 5 } },
-      writing: { enabled: true, wordLimit: 100 }
+      combinedExercise: {
+        enabled: false,
+        type1: 'Completa gli Spazi',
+        type2: 'Traduzione',
+        count: 0
+      },
+      reading: { enabled: true, mode: 'generate', customText: '', wordCount: 150, exercises: { 'Scelta Multipla': 3 }, directives: '' },
+      listening: { enabled: false, durationSeconds: 60, exercises: { 'Scelta Multipla': 5 }, directives: '' },
+      writing: { enabled: true, wordLimit: 100, numQuestions: 1, directives: '' }
     });
   };
 
@@ -69,8 +81,9 @@ const QuizInputForm: React.FC<QuizInputFormProps> = ({ onGenerate, isLoading }) 
   const isFormValid = () => {
     if (topic.name.trim() === '') return false;
     const hasExercises = Object.values(topic.exercises).some(count => (count as number) > 0);
+    const hasCombined = topic.combinedExercise?.enabled && topic.combinedExercise.count > 0;
     const hasExtra = topic.reading.enabled || topic.listening.enabled || topic.writing.enabled;
-    return hasExercises || hasExtra;
+    return hasExercises || hasCombined || hasExtra;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -89,7 +102,8 @@ const QuizInputForm: React.FC<QuizInputFormProps> = ({ onGenerate, isLoading }) 
     { key: 'Traduzione', label: 'Traduzione', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 016-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 01-3.827-5.802" /> }
   ];
 
-  const totalExercises = Object.values(topic.exercises).reduce((a: number, b) => a + (b as number), 0);
+  const combinedCount = (topic.combinedExercise?.enabled && topic.combinedExercise.count) ? topic.combinedExercise.count : 0;
+  const totalExercises = Object.values(topic.exercises).reduce((a: number, b) => a + (b as number), 0) + combinedCount;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8 pb-20">
@@ -219,6 +233,118 @@ const QuizInputForm: React.FC<QuizInputFormProps> = ({ onGenerate, isLoading }) 
          </div>
       </div>
 
+      {/* Box 2.5: Esercizio Combinato */}
+       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 shadow-sm transition-colors">
+          <div className="flex justify-between items-center mb-6">
+             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 tracking-tight transition-colors">
+               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-indigo-600 dark:text-indigo-400">
+                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+               </svg>
+               Esercizio Combinato (Opzionale)
+             </h3>
+             <span className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold bg-indigo-50 dark:bg-indigo-950/30 px-3 py-1 rounded-full">Al massimo due tipologie</span>
+          </div>
+
+          <div className={`border rounded-xl p-5 transition-all duration-200 ${topic.combinedExercise?.enabled ? 'border-indigo-500 bg-indigo-50/20 dark:bg-indigo-950/10' : 'border-slate-200 dark:border-slate-700 bg-transparent'}`}>
+            <div className="flex items-start gap-4">
+              <input 
+                type="checkbox"
+                checked={topic.combinedExercise?.enabled || false}
+                onChange={(e) => setTopic(prev => ({
+                  ...prev,
+                  combinedExercise: {
+                    enabled: e.target.checked,
+                    type1: prev.combinedExercise?.type1 || 'Completa gli Spazi',
+                    type2: prev.combinedExercise?.type2 || 'Traduzione',
+                    count: e.target.checked ? (prev.combinedExercise?.count || 5) : 0
+                  }
+                }))}
+                className="w-5 h-5 mt-1 rounded border-slate-300 dark:border-slate-600 text-indigo-600 focus:ring-indigo-600 bg-white dark:bg-slate-900 cursor-pointer"
+                id="toggle-combined"
+              />
+              <div className="flex-1">
+                <label htmlFor="toggle-combined" className="cursor-pointer select-none">
+                  <span className="font-bold text-slate-800 dark:text-slate-100 block transition-colors">Abilita Esercizio Combinato</span>
+                  <span className="text-sm text-slate-500 dark:text-slate-400 block transition-colors">Combina due compiti differenti in un unico esercizio (es. completa gli spazi + traduci).</span>
+                </label>
+
+                {topic.combinedExercise?.enabled && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6 pt-4 border-t border-indigo-100 dark:border-indigo-900/40">
+                    <div>
+                      <label className="block text-sm text-slate-600 dark:text-slate-400 mb-2 font-medium">Primo Esercizio</label>
+                      <select
+                        value={topic.combinedExercise.type1}
+                        onChange={(e) => setTopic(prev => ({
+                          ...prev,
+                          combinedExercise: { ...prev.combinedExercise!, type1: e.target.value }
+                        }))}
+                        className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900"
+                      >
+                        <option value="Completa gli Spazi">Completa gli Spazi</option>
+                        <option value="Traduzione">Traduzione</option>
+                        <option value="Scelta Multipla">Scelta Multipla</option>
+                        <option value="Vero/Falso">Vero/Falso</option>
+                        <option value="Risposta Breve">Risposta Breve</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-slate-600 dark:text-slate-400 mb-2 font-medium">Secondo Esercizio</label>
+                      <select
+                        value={topic.combinedExercise.type2}
+                        onChange={(e) => setTopic(prev => ({
+                          ...prev,
+                          combinedExercise: { ...prev.combinedExercise!, type2: e.target.value }
+                        }))}
+                        className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900"
+                      >
+                        <option value="Traduzione">Traduzione</option>
+                        <option value="Completa gli Spazi">Completa gli Spazi</option>
+                        <option value="Scelta Multipla">Scelta Multipla</option>
+                        <option value="Vero/Falso">Vero/Falso</option>
+                        <option value="Risposta Breve">Risposta Breve</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-slate-600 dark:text-slate-400 mb-2 font-medium">Numero Domande</label>
+                      <div className="flex items-center border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 overflow-hidden w-full max-w-[150px]">
+                        <button 
+                          type="button" 
+                          onClick={() => setTopic(prev => ({
+                            ...prev,
+                            combinedExercise: { ...prev.combinedExercise!, count: Math.max(1, prev.combinedExercise!.count - 1) }
+                          }))}
+                          className="px-3 py-2 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-30 transition-colors"
+                          disabled={topic.combinedExercise.count <= 1}
+                        >&minus;</button>
+                        <input 
+                          type="number" 
+                          value={topic.combinedExercise.count} 
+                          onChange={(e) => {
+                            const val = Math.max(1, parseInt(e.target.value) || 1);
+                            setTopic(prev => ({
+                              ...prev,
+                              combinedExercise: { ...prev.combinedExercise!, count: val }
+                            }));
+                          }}
+                          className="w-12 text-center text-sm font-bold border-none focus:ring-0 text-slate-800 dark:text-slate-100 bg-transparent p-0"
+                        />
+                        <button 
+                          type="button" 
+                          onClick={() => setTopic(prev => ({
+                            ...prev,
+                            combinedExercise: { ...prev.combinedExercise!, count: prev.combinedExercise!.count + 1 }
+                          }))}
+                          className="px-3 py-2 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                        >&#43;</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+       </div>
+
       {/* Box 3: Competenze Extra */}
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 shadow-sm transition-colors">
         <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-6 tracking-tight transition-colors">
@@ -230,73 +356,237 @@ const QuizInputForm: React.FC<QuizInputFormProps> = ({ onGenerate, isLoading }) 
 
         <div className="space-y-4">
           {/* Reading */}
-          <label className={`block border rounded-lg p-4 cursor-pointer transition-all duration-200 ${topic.reading.enabled ? 'border-emerald-500 bg-emerald-50/30 dark:bg-emerald-900/10' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-transparent'}`}>
+          <div className={`border rounded-lg p-4 transition-all duration-200 ${topic.reading.enabled ? 'border-emerald-500 bg-emerald-50/30 dark:bg-emerald-900/10' : 'border-slate-200 dark:border-slate-700 bg-transparent'}`}>
              <div className="flex items-start gap-4">
                <div className="pt-0.5">
                   <input 
                     type="checkbox" 
                     checked={topic.reading.enabled} 
                     onChange={(e) => setTopic(prev => ({...prev, reading: {...prev.reading, enabled: e.target.checked}}))}
-                    className="w-5 h-5 rounded border-slate-300 dark:border-slate-600 text-emerald-600 focus:ring-emerald-600 bg-white dark:bg-slate-900" 
+                    className="w-5 h-5 rounded border-slate-300 dark:border-slate-600 text-emerald-600 focus:ring-emerald-600 bg-white dark:bg-slate-900 cursor-pointer" 
+                    id="reading-checkbox"
                   />
                </div>
-               <div>
-                  <div className="flex items-center gap-2">
+               <div className="flex-1">
+                  <label htmlFor="reading-checkbox" className="flex items-center gap-2 cursor-pointer select-none">
                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-slate-500 dark:text-slate-400">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
                      </svg>
                      <span className="font-bold text-slate-800 dark:text-slate-100 transition-colors">Aggiungi Lettura (Reading Comprehension)</span>
-                  </div>
+                  </label>
                   <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 transition-colors">Genera un testo originale con 5 domande di comprensione associate.</p>
+                  
+                  {topic.reading.enabled && (
+                    <div className="mt-3 space-y-3">
+                      <div className="flex gap-4">
+                        <div className="w-1/3">
+                          <label className="block text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-1.5 uppercase tracking-wide">
+                            Numero Domande:
+                          </label>
+                          <input 
+                            type="number" 
+                            min="1"
+                            max="15"
+                            value={topic.reading.exercises['Scelta Multipla'] || 5}
+                            onChange={(e) => {
+                              const val = Math.max(1, parseInt(e.target.value) || 5);
+                              setTopic(prev => ({
+                                ...prev,
+                                reading: { ...prev.reading, exercises: { 'Scelta Multipla': val } }
+                              }));
+                            }}
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 text-sm"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-1.5 uppercase tracking-wide">
+                          Direttive per l'IA (es. "usa termini economici", "struttura in due paragrafi"):
+                        </label>
+                        <input 
+                          type="text" 
+                          value={topic.reading.directives || ''}
+                          onChange={(e) => setTopic(prev => ({
+                            ...prev, 
+                            reading: { ...prev.reading, directives: e.target.value }
+                          }))}
+                          placeholder="Scrivi le istruzioni speciali per la lettura..."
+                          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 text-sm"
+                        />
+                      </div>
+                    </div>
+                  )}
                </div>
              </div>
-          </label>
+          </div>
 
           {/* Listening */}
-           <label className={`block border rounded-lg p-4 cursor-pointer transition-all duration-200 ${topic.listening.enabled ? 'border-emerald-500 bg-emerald-50/30 dark:bg-emerald-900/10' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-transparent'}`}>
+           <div className={`border rounded-lg p-4 transition-all duration-200 ${topic.listening.enabled ? 'border-emerald-500 bg-emerald-50/30 dark:bg-emerald-900/10' : 'border-slate-200 dark:border-slate-700 bg-transparent'}`}>
              <div className="flex items-start gap-4">
                <div className="pt-0.5">
                   <input 
                     type="checkbox" 
                     checked={topic.listening.enabled} 
                     onChange={(e) => setTopic(prev => ({...prev, listening: {...prev.listening, enabled: e.target.checked}}))}
-                    className="w-5 h-5 rounded border-slate-300 dark:border-slate-600 text-emerald-600 focus:ring-emerald-600 bg-white dark:bg-slate-900" 
+                    className="w-5 h-5 rounded border-slate-300 dark:border-slate-600 text-emerald-600 focus:ring-emerald-600 bg-white dark:bg-slate-900 cursor-pointer" 
+                    id="listening-checkbox"
                   />
                </div>
-               <div>
-                  <div className="flex items-center gap-2">
+               <div className="flex-1">
+                  <label htmlFor="listening-checkbox" className="flex items-center gap-2 cursor-pointer select-none">
                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-slate-500 dark:text-slate-400">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
                      </svg>
                      <span className="font-bold text-slate-800 dark:text-slate-100 transition-colors">Aggiungi Ascolto (Listening Script)</span>
-                  </div>
+                  </label>
                   <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 transition-colors">Genera uno script per l'insegnante con domande di ascolto collegate.</p>
+                  
+                  {topic.listening.enabled && (
+                    <div className="mt-3 space-y-3">
+                      <div className="flex gap-4">
+                        <div className="w-1/2">
+                          <label className="block text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-1.5 uppercase tracking-wide">
+                            Numero Domande:
+                          </label>
+                          <input 
+                            type="number" 
+                            min="1"
+                            max="15"
+                            value={topic.listening.exercises['Scelta Multipla'] || 5}
+                            onChange={(e) => {
+                              const val = Math.max(1, parseInt(e.target.value) || 5);
+                              setTopic(prev => ({
+                                ...prev,
+                                listening: { ...prev.listening, exercises: { 'Scelta Multipla': val } }
+                              }));
+                            }}
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 text-sm"
+                          />
+                        </div>
+                        <div className="w-1/2">
+                          <label className="block text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-1.5 uppercase tracking-wide">
+                            Durata Audio (secondi):
+                          </label>
+                          <input 
+                            type="number" 
+                            min="10"
+                            max="300"
+                            value={topic.listening.durationSeconds || 60}
+                            onChange={(e) => {
+                              const val = Math.max(10, parseInt(e.target.value) || 60);
+                              setTopic(prev => ({
+                                ...prev,
+                                listening: { ...prev.listening, durationSeconds: val }
+                              }));
+                            }}
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 text-sm"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-1.5 uppercase tracking-wide">
+                          Direttive per l'IA (es. "dialogo in hotel tra due persone", "accento britannico"):
+                        </label>
+                        <input 
+                          type="text" 
+                          value={topic.listening.directives || ''}
+                          onChange={(e) => setTopic(prev => ({
+                            ...prev, 
+                            listening: { ...prev.listening, directives: e.target.value }
+                          }))}
+                          placeholder="Scrivi le istruzioni speciali per lo script d'ascolto..."
+                          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 text-sm"
+                        />
+                      </div>
+                    </div>
+                  )}
                </div>
              </div>
-          </label>
+          </div>
 
           {/* Writing */}
-           <label className={`block border rounded-lg p-4 cursor-pointer transition-all duration-200 ${topic.writing.enabled ? 'border-emerald-500 bg-emerald-50/30 dark:bg-emerald-900/10' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-transparent'}`}>
+           <div className={`border rounded-lg p-4 transition-all duration-200 ${topic.writing.enabled ? 'border-emerald-500 bg-emerald-50/30 dark:bg-emerald-900/10' : 'border-slate-200 dark:border-slate-700 bg-transparent'}`}>
              <div className="flex items-start gap-4">
                <div className="pt-0.5">
                   <input 
                     type="checkbox" 
                     checked={topic.writing.enabled} 
                     onChange={(e) => setTopic(prev => ({...prev, writing: {...prev.writing, enabled: e.target.checked}}))}
-                    className="w-5 h-5 rounded border-slate-300 dark:border-slate-600 text-emerald-600 focus:ring-emerald-600 bg-white dark:bg-slate-900" 
+                    className="w-5 h-5 rounded border-slate-300 dark:border-slate-600 text-emerald-600 focus:ring-emerald-600 bg-white dark:bg-slate-900 cursor-pointer" 
+                    id="writing-checkbox"
                   />
                </div>
-               <div>
-                  <div className="flex items-center gap-2">
+               <div className="flex-1">
+                  <label htmlFor="writing-checkbox" className="flex items-center gap-2 cursor-pointer select-none">
                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-slate-500 dark:text-slate-400">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                      </svg>
                      <span className="font-bold text-slate-800 dark:text-slate-100 transition-colors">Aggiungi Scrittura (Writing Task)</span>
-                  </div>
+                  </label>
                   <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 transition-colors">Includi un prompt di produzione scritta basato sull'argomento principale.</p>
+                  
+                  {topic.writing.enabled && (
+                    <div className="mt-3 space-y-3">
+                      <div className="flex gap-4">
+                        <div className="w-1/2">
+                          <label className="block text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-1.5 uppercase tracking-wide">
+                            Limite di Parole:
+                          </label>
+                          <input 
+                            type="number" 
+                            min="20"
+                            max="1000"
+                            value={topic.writing.wordLimit || 100}
+                            onChange={(e) => {
+                              const val = Math.max(20, parseInt(e.target.value) || 100);
+                              setTopic(prev => ({
+                                ...prev,
+                                writing: { ...prev.writing, wordLimit: val }
+                              }));
+                            }}
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 text-sm"
+                          />
+                        </div>
+                        <div className="w-1/2">
+                          <label className="block text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-1.5 uppercase tracking-wide">
+                            Numero Tracce:
+                          </label>
+                          <input 
+                            type="number" 
+                            min="1"
+                            max="10"
+                            value={topic.writing.numQuestions || 1}
+                            onChange={(e) => {
+                              const val = Math.max(1, parseInt(e.target.value) || 1);
+                              setTopic(prev => ({
+                                ...prev,
+                                writing: { ...prev.writing, numQuestions: val }
+                              }));
+                            }}
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 text-sm"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-1.5 uppercase tracking-wide">
+                          Direttive per l'IA (es. "scrivi una lettera formale di protesta", "recensione"):
+                        </label>
+                        <input 
+                          type="text" 
+                          value={topic.writing.directives || ''}
+                          onChange={(e) => setTopic(prev => ({
+                            ...prev, 
+                            writing: { ...prev.writing, directives: e.target.value }
+                          }))}
+                          placeholder="Scrivi le istruzioni speciali per la traccia di scrittura..."
+                          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 text-sm"
+                        />
+                      </div>
+                    </div>
+                  )}
                </div>
              </div>
-          </label>
+          </div>
         </div>
       </div>
       

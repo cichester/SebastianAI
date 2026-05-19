@@ -18,10 +18,13 @@ interface QuizPreviewProps {
   onRegenerate: () => void;
   onRegenerateSection: (quizIndex: number, topic: string, questionType: string, count: number) => void;
   onRegenerateComplexSection: (quizIndex: number, sectionType: 'reading' | 'listening', topic: string) => void;
+  onRegenerateWritingPrompt: (quizIndex: number, topic: string) => void;
   onUpdateQuiz: (quizIndex: number, updatedQuiz: Quiz) => void;
   pdfFormat: PdfFormat;
   isCreating: boolean;
   isRegeneratingId: string | null;
+  formCreationStateUI?: React.ReactNode;
+  docCreationStateUI?: React.ReactNode;
 }
 
 const getQuestionTypeName = (type: QuestionType) => {
@@ -185,6 +188,7 @@ const ReadingSectionCard: React.FC<{ section: ReadingSection; onRegenerate: () =
                     <button 
                         onClick={onRegenerate}
                         disabled={isAnyActionInProgress}
+                        title="Rigenera solo questa sezione di lettura, il resto del compito rimarrà invariato."
                         className="flex items-center text-xs font-semibold text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-200 disabled:opacity-50 disabled:cursor-not-allowed transition print:hidden"
                     >
                         {isRegenerating ? (
@@ -192,7 +196,7 @@ const ReadingSectionCard: React.FC<{ section: ReadingSection; onRegenerate: () =
                         ) : (
                             <SparklesIcon className="w-4 h-4 mr-1" />
                         )}
-                        <span>{isRegenerating ? 'Rigenero...' : 'Rigenera'}</span>
+                        <span>{isRegenerating ? 'Rigenero...' : 'Rigenera solo questa sezione'}</span>
                     </button>
                 )}
             </div>
@@ -225,9 +229,33 @@ const ReadingSectionCard: React.FC<{ section: ReadingSection; onRegenerate: () =
     );
 };
 
-const WritingPromptCard: React.FC<{ prompt: WritingPrompt; isEditing: boolean; onUpdate: (updatedPrompt: WritingPrompt) => void }> = ({ prompt, isEditing, onUpdate }) => (
+const WritingPromptCard: React.FC<{
+    prompt: WritingPrompt;
+    onRegenerate: () => void;
+    isRegenerating: boolean;
+    isAnyActionInProgress: boolean;
+    isEditing: boolean;
+    onUpdate: (updatedPrompt: WritingPrompt) => void;
+}> = ({ prompt, onRegenerate, isRegenerating, isAnyActionInProgress, isEditing, onUpdate }) => (
      <div className="p-5 rounded-xl border border-sky-400 dark:border-sky-800 bg-sky-100/50 dark:bg-sky-900/30 shadow-sm transition-colors print:border-slate-300 print:bg-white print:break-inside-avoid">
-        <h4 className="text-lg font-bold text-sky-900 dark:text-sky-300 print:text-black mb-2">Writing Prompt</h4>
+        <div className="flex justify-between items-center mb-2">
+            <h4 className="text-lg font-bold text-sky-900 dark:text-sky-300 print:text-black">Writing Prompt</h4>
+            {!isEditing && (
+                 <button 
+                     onClick={onRegenerate}
+                     disabled={isAnyActionInProgress}
+                     title="Rigenera solo questa traccia di scrittura, il resto del compito rimarrà invariato."
+                     className="flex items-center text-xs font-semibold text-sky-600 dark:text-sky-400 hover:text-sky-800 dark:hover:text-sky-200 disabled:opacity-50 disabled:cursor-not-allowed transition print:hidden bg-sky-100 dark:bg-sky-900/30 px-3 py-1.5 rounded-full"
+                 >
+                     {isRegenerating ? (
+                         <LoadingSpinner className="mr-2" dotClassName="w-1 h-1" />
+                     ) : (
+                         <SparklesIcon className="w-4 h-4 mr-1" />
+                     )}
+                     <span>{isRegenerating ? 'Rigenero...' : 'Rigenera solo questa sezione'}</span>
+                 </button>
+             )}
+        </div>
         <div className="p-4 bg-white dark:bg-slate-800 rounded-md border border-slate-200 dark:border-slate-700 print:border-slate-300 print:bg-white">
             {isEditing ? (
                 <textarea 
@@ -280,6 +308,7 @@ const ListeningSectionCard: React.FC<{ section: ListeningSection; onRegenerate: 
                     <button 
                         onClick={onRegenerate}
                         disabled={isAnyActionInProgress}
+                        title="Rigenera solo questa sezione di ascolto, il resto del compito rimarrà invariato."
                         className="flex items-center text-xs font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-amber-200 disabled:opacity-50 disabled:cursor-not-allowed transition print:hidden"
                     >
                         {isRegenerating ? (
@@ -287,7 +316,7 @@ const ListeningSectionCard: React.FC<{ section: ListeningSection; onRegenerate: 
                         ) : (
                             <SparklesIcon className="w-4 h-4 mr-1" />
                         )}
-                        <span>{isRegenerating ? 'Rigenero...' : 'Rigenera'}</span>
+                        <span>{isRegenerating ? 'Rigenero...' : 'Rigenera solo questa sezione'}</span>
                     </button>
                  )}
             </div>
@@ -322,7 +351,7 @@ const ListeningSectionCard: React.FC<{ section: ListeningSection; onRegenerate: 
     );
 };
 
-const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateForm, onCreateDoc, onRegenerate, onRegenerateSection, onRegenerateComplexSection, onUpdateQuiz, pdfFormat, isCreating, isRegeneratingId }) => {
+const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateForm, onCreateDoc, onRegenerate, onRegenerateSection, onRegenerateComplexSection, onRegenerateWritingPrompt, onUpdateQuiz, pdfFormat, isCreating, isRegeneratingId, formCreationStateUI, docCreationStateUI }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
@@ -335,11 +364,7 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
   const manualItemsRefs = useRef<(HTMLDivElement | null)[]>([]);
   const manualWritingRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  const handlePrintClassicManual = async () => {
-    if (!activeQuiz) return;
-    setIsPrinting(true);
-    
-    try {
+  const generateSingleClassicPDF = async (quiz: Quiz) => {
       // Misure esatte per A4 @ 96 DPI (1px ≈ 1/96 pollice)
       // A4: 210mm x 297mm -> 794px x 1123px
       const A4_WIDTH = 794;
@@ -406,19 +431,19 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
              targetY = currentYRight + (isHeader ? verticalGap : 0);
              
              if (targetY + elH > PAGE_BOTTOM_THRESHOLD && targetY > MARGIN + 10) {
-               // Non ci sta neanche a destra -> Nuova Pagina
-               doc.addPage();
-               currentPage++;
-               currentActiveCol = 'left';
-               currentYLeft = MARGIN;
-               currentYRight = MARGIN;
-               targetX = x_left;
-               targetY = currentYLeft;
-               currentYLeft += elH;
+                // Non ci sta neanche a destra -> Nuova Pagina
+                doc.addPage();
+                currentPage++;
+                currentActiveCol = 'left';
+                currentYLeft = MARGIN;
+                currentYRight = MARGIN;
+                targetX = x_left;
+                targetY = currentYLeft;
+                currentYLeft += elH;
              } else {
-               // Entra a destra
-               currentYRight = targetY + elH;
-               targetY = targetY; // maintain coordinate
+                // Entra a destra
+                currentYRight = targetY + elH;
+                targetY = targetY; // maintain coordinate
              }
           } else {
             // Entra a sinistra
@@ -484,7 +509,15 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
         doc.text(`Pagina ${i} / ${totalPages}`, A4_WIDTH - MARGIN - 60, A4_HEIGHT - 20);
       }
 
-      doc.save(`${activeQuiz.title || 'Quiz'}.pdf`);
+      const label = quiz.versionLabel || 'A';
+      doc.save(`${quiz.title || 'Quiz'}_Fila_${label}.pdf`);
+  };
+
+  const handlePrintClassicManual = async () => {
+    if (!activeQuiz) return;
+    setIsPrinting(true);
+    try {
+      await generateSingleClassicPDF(activeQuiz);
     } catch (err) {
       console.error("Error processing manual PDF composition:", err);
     } finally {
@@ -493,29 +526,33 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
   };
 
   const handlePrint = async () => {
-    if (!pdfContainerRef.current) return;
-    
-    // Usa la composizione manuale SE il formato è CLASSIC (Approccio 1)
-    if (pdfFormat === PdfFormat.CLASSIC) {
-       await handlePrintClassicManual();
-       return;
-    }
-
-    // Altrimenti mantieni l'html2pdf classico
     setIsPrinting(true);
-    
-    const element = pdfContainerRef.current;
-    
-    const opt = {
-      margin:       10,
-      filename:     `${quizzes[activeTab]?.title || 'Quiz'}.pdf`,
-      image:        { type: 'jpeg' as const, quality: 0.98 },
-      html2canvas:  { scale: 2, useCORS: true, windowWidth: 1024 },
-      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
-    };
-
     try {
-      await html2pdf().set(opt).from(element).save();
+      if (pdfFormat === PdfFormat.CLASSIC) {
+         const originalTab = activeTab;
+         for (let i = 0; i < quizzes.length; i++) {
+           setActiveTab(i);
+           // Aspetta che React aggiorni lo stato e i ref del DOM
+           await new Promise(resolve => setTimeout(resolve, 650));
+           await generateSingleClassicPDF(quizzes[i]);
+         }
+         setActiveTab(originalTab);
+      } else {
+         // MODERNO / FORMALE: Stampa tutti i PDF usando i container pre-renderizzati
+         for (let i = 0; i < quizzes.length; i++) {
+           const element = document.getElementById(`pdf-container-${i}`);
+           if (!element) continue;
+           const opt = {
+             margin:       10,
+             filename:     `${quizzes[i].title || 'Quiz'}_Fila_${quizzes[i].versionLabel || String.fromCharCode(65 + i)}.pdf`,
+             image:        { type: 'jpeg' as const, quality: 0.98 },
+             html2canvas:  { scale: 2, useCORS: true, windowWidth: 1024 },
+             jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
+           };
+           await html2pdf().set(opt).from(element).save();
+           await new Promise(resolve => setTimeout(resolve, 500));
+         }
+      }
     } catch (error) {
       console.error("Error generating PDF:", error);
     } finally {
@@ -524,12 +561,14 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
   };
 
   const handleDownloadDocx = async () => {
-    if (!activeQuiz) return;
     setIsGeneratingDocx(true);
     try {
-      await generateDocx(activeQuiz);
+      for (let i = 0; i < quizzes.length; i++) {
+        await generateDocx(quizzes[i]);
+        await new Promise(resolve => setTimeout(resolve, 400));
+      }
     } catch (error) {
-      console.error("Error generating Word document:", error);
+      console.error("Error generating Word documents:", error);
     } finally {
       setIsGeneratingDocx(false);
     }
@@ -648,18 +687,18 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
                 onClick={() => setActiveTab(index)}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition-all text-left border ${
                   isSelected 
-                    ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800 text-indigo-800 dark:text-indigo-300 shadow-sm' 
-                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-indigo-200 dark:hover:border-indigo-800 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                    ? 'bg-indigo-50 dark:bg-indigo-900/40 border-indigo-200 dark:border-indigo-700 text-indigo-800 dark:text-indigo-200 shadow-sm' 
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-indigo-200 dark:hover:border-indigo-600 hover:bg-slate-50 dark:hover:bg-slate-700/80'
                 }`}
               >
-                  <div className={`p-2 rounded-lg ${isSelected ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
+                  <div className={`p-2 rounded-lg ${isSelected ? 'bg-indigo-100 dark:bg-indigo-800/80 text-indigo-700 dark:text-indigo-100' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300'}`}>
                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                       </svg>
                   </div>
                   <div>
-                      <div className="text-slate-900 dark:text-slate-100 font-bold transition-colors">{quiz.versionLabel ? `Fila ${quiz.versionLabel}` : `Versione ${index + 1}`}</div>
-                      <div className={`text-xs transition-colors ${isSelected ? 'text-indigo-700 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>Quiz Pronto</div>
+                      <div className="text-slate-900 dark:text-white font-bold transition-colors">{quiz.versionLabel ? `Fila ${quiz.versionLabel}` : `Versione ${index + 1}`}</div>
+                      <div className={`text-xs transition-colors ${isSelected ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-500 dark:text-slate-400'}`}>Quiz Pronto</div>
                   </div>
               </button>
             )
@@ -669,16 +708,19 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
       {/* Right Content pane */}
       <div className="flex-1 flex flex-col min-w-0">
           <div className="mb-4">
+              <div className="mb-6 -mt-4">
+                {formCreationStateUI}
+                {docCreationStateUI}
+              </div>
               <p className="text-slate-500 mb-4">Visualizza in anteprima e modifica le varianti generate prima dell'esportazione.</p>
-              
-              <div className="flex flex-wrap gap-3 pb-4">
+                      <div className="flex flex-wrap gap-3 pb-4">
                 <button
                     onClick={handlePrint}
                     disabled={isPrinting || isAnyActionInProgress}
                     className="flex items-center px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 font-medium transition-colors disabled:opacity-50 text-sm shadow-sm"
                 >
                     {isPrinting ? <LoadingSpinner className="mr-2" dotClassName="w-1 h-1" /> : <PrinterIcon className="w-4 h-4 mr-2 text-slate-500 dark:text-slate-400" />}
-                    Stampa / Scarica PDF
+                    Stampa / Scarica tutti i PDF
                 </button>
                 <button
                     onClick={handleDownloadDocx}
@@ -689,10 +731,10 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
                         <LoadingSpinner className="mr-2" dotClassName="w-1 h-1" />
                     ) : (
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 mr-2 text-blue-600 dark:text-blue-400">
-                          <path d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0016.5 9h-1.875a1.875 1.875 0 01-1.875-1.875V5.25A3.75 3.75 0 009 1.5H5.625zM12.986 18h2.264v-1.125h-2.264V18zM12.986 16.125h2.264V15h-2.264v1.125zM15.25 14.25v-1.125h-2.264v1.125h2.264zM10.714 18h2.271v-1.125H10.714V18zM10.714 16.125h2.271V15h-2.271v1.125zM12.985 14.25v-1.125h-2.271v1.125h2.271zM8.471 18h2.243v-1.125H8.471V18zM8.471 16.125h2.243V15H8.471v1.125zM10.714 14.25v-1.125H8.471v1.125h2.243z" />
+                           <path d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0016.5 9h-1.875a1.875 1.875 0 01-1.875-1.875V5.25A3.75 3.75 0 009 1.5H5.625zM12.986 18h2.264v-1.125h-2.264V18zM12.986 16.125h2.264V15h-2.264v1.125zM15.25 14.25v-1.125h-2.264v1.125h2.264zM10.714 18h2.271v-1.125H10.714V18zM10.714 16.125h2.271V15h-2.271v1.125zM12.985 14.25v-1.125h-2.271v1.125h2.271zM8.471 18h2.243v-1.125H8.471V18zM8.471 16.125h2.243V15H8.471v1.125zM10.714 14.25v-1.125H8.471v1.125h2.243z" />
                         </svg>
                     )}
-                    Scarica Word
+                    Scarica tutte le file (.docx)
                 </button>
                 <button
                   onClick={onCreateDoc}
@@ -800,6 +842,7 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
                                 <button 
                                     onClick={() => onRegenerateSection(activeTab, topic, type.replace(' (Multiple Choice)', ''), questions.length)}
                                     disabled={isAnyActionInProgress}
+                                    title="Rigenera solo questo esercizio, il resto del compito rimarrà invariato."
                                     className="flex items-center text-xs font-semibold text-indigo-700 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 disabled:opacity-50 disabled:cursor-not-allowed transition print:hidden bg-indigo-100/50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-full"
                                 >
                                      {isCurrentRegen ? (
@@ -807,7 +850,7 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
                                      ) : (
                                          <SparklesIcon className="w-4 h-4 mr-1" />
                                      )}
-                                    <span>{isCurrentRegen ? 'Rigenero...' : 'Rigenera'}</span>
+                                    <span>{isCurrentRegen ? 'Rigenero...' : 'Rigenera solo questa sezione'}</span>
                                 </button>
                             )}
                         </div>
@@ -828,25 +871,34 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
                     )
                 })}
 
-                {activeQuiz.writingPrompts?.map((prompt, i) => (
-                    <div key={`write-sec-${i}`}>
-                        <h3 className="text-xl font-bold text-indigo-700 dark:text-indigo-400 mb-4 pb-2 border-b-2 border-indigo-200 dark:border-indigo-800 print:text-black print:border-slate-300">{prompt.topic}</h3>
-                        <WritingPromptCard 
-                            prompt={prompt} 
-                            isEditing={isEditing}
-                            onUpdate={(updatedP) => handleWritingPromptUpdate(i, updatedP)}
-                        />
-                    </div>
-                ))}
+                {activeQuiz.writingPrompts?.map((prompt, i) => {
+                    const regenId = `writing-${prompt.topic}`;
+                    const isCurrentRegen = isRegeneratingId === regenId;
+                    return (
+                        <div key={`write-sec-${i}`}>
+                            <h3 className="text-xl font-bold text-indigo-700 dark:text-indigo-400 mb-4 pb-2 border-b-2 border-indigo-200 dark:border-indigo-800 print:text-black print:border-slate-300">{prompt.topic}</h3>
+                            <WritingPromptCard 
+                                prompt={prompt} 
+                                onRegenerate={() => onRegenerateWritingPrompt(activeTab, prompt.topic)}
+                                isRegenerating={isCurrentRegen}
+                                isAnyActionInProgress={isAnyActionInProgress}
+                                isEditing={isEditing}
+                                onUpdate={(updatedP) => handleWritingPromptUpdate(i, updatedP)}
+                            />
+                        </div>
+                    );
+                })}
              </div>
           </div>
       </div>
       
       {/* Hidden container for PDF generation */}
       <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
-        <div ref={pdfContainerRef}>
-          <PrintableQuiz quiz={activeQuiz} language={language} pdfFormat={pdfFormat} />
-        </div>
+        {quizzes.map((quiz, idx) => (
+          <div key={idx} id={`pdf-container-${idx}`}>
+            <PrintableQuiz quiz={quiz} language={language} pdfFormat={pdfFormat} />
+          </div>
+        ))}
       </div>
 
       {/* DOM hidden specific for manual PDF measurement (Approach 1) */}
