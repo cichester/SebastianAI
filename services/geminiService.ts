@@ -106,7 +106,7 @@ const getQuestionTypeEnumString = (exerciseType: string): string | null => {
   return null;
 };
 
-function buildPrompt(params: QuizGenerationParams, versionLabel: string): string {
+function buildPrompt(params: QuizGenerationParams, versionLabel: string, listeningTexts?: Record<string, string>): string {
   let topicDetails = params.topics.map(topic => {
     const exerciseCounts = Object.entries(topic.exercises)
       .filter(([, count]) => count > 0)
@@ -164,7 +164,15 @@ function buildPrompt(params: QuizGenerationParams, versionLabel: string): string
         .join('\n');
 
       if (listeningExerciseCounts) {
-        listeningDetails = `- Esercizio di Ascolto:\n  - Genera un testo (transcript) di circa ${wordEstimate} parole (per una durata audio di circa ${topic.listening.durationSeconds} secondi).\n  - Basato su questo testo, crea le seguenti domande:\n${listeningExerciseCounts.split('\n').map(l => `    ${l}`).join('\n')}`;
+        const preExistingText = listeningTexts?.[topic.name];
+        if (preExistingText) {
+          listeningDetails = `- Esercizio di Ascolto:\n  - **ATTENZIONE**: Per questo esercizio devi usare ESATTAMENTE il seguente testo (transcript) già stabilito per le altre file:\n"""\n${preExistingText}\n"""\n  - Non inventare un nuovo testo. Usa quello sopra.\n  - Basato su questo testo specifico, crea le seguenti domande (che devono essere diverse e uniche rispetto a quelle delle altre file):\n${listeningExerciseCounts.split('\n').map(l => `    ${l}`).join('\n')}`;
+        } else {
+          listeningDetails = `- Esercizio di Ascolto:\n  - Genera un testo (transcript) di circa ${wordEstimate} parole (per una durata audio di circa ${topic.listening.durationSeconds} secondi).\n  - Basato su questo testo, crea le seguenti domande:\n${listeningExerciseCounts.split('\n').map(l => `    ${l}`).join('\n')}`;
+        }
+        if (topic.listening.directives) {
+          listeningDetails += `\n  - Suggerimenti/Direttive per l'audio: ${topic.listening.directives}`;
+        }
       }
     }
 
@@ -297,9 +305,12 @@ export async function generateQuizzes(
   const versions = Array.from({ length: params.numVersions }, (_, i) => String.fromCharCode(65 + i));
   const results: Quiz[] = [];
   const numVersions = params.numVersions;
+  const listeningTexts: Record<string, string> = {};
+  const listeningAudios: Record<string, string> = {};
 
   // Calculate total "work units" for progressive bar
   // Each version has: 1 (Prompt Building) + 5 (LLM Text Gen) + 1 (Audio Gen per listening section)
+  // For subsequent versions, audio gen is skipped, but we keep calculations simple.
   const unitsPerVersion = 1 + 5 + params.topics.filter(t => t.listening.enabled).length;
   const totalUnits = numVersions * unitsPerVersion;
   let completedUnits = 0;
@@ -327,7 +338,7 @@ export async function generateQuizzes(
 
     // Phase 1: Build Prompt
     updateProgress('text', `Inizializzazione Fila ${versionLabel}...`, 0, i);
-    const prompt = buildPrompt(params, versionLabel);
+    const prompt = buildPrompt(params, versionLabel, listeningTexts);
     completedUnits += 1;
 
     // Phase 2: LLM Call
@@ -348,15 +359,27 @@ export async function generateQuizzes(
 
       for (let j = 0; j < listeningSections.length; j++) {
         const section = listeningSections[j];
-        updateProgress('audio', `Creazione Audio Fila ${versionLabel} (${j + 1}/${listeningSections.length})`, 0, i);
+        const topicName = section.topic;
 
-        if (section.text && !section.audioBase64) {
-          if (signal?.aborted) {
-            const err = new Error("Aborted");
-            err.name = "AbortError";
-            throw err;
+        if (listeningTexts[topicName]) {
+          // Reuse transcript and audio from previous fila (e.g. Fila A)
+          section.text = listeningTexts[topicName];
+          section.audioBase64 = listeningAudios[topicName];
+        } else {
+          // First time generating this listening section
+          updateProgress('audio', `Creazione Audio Fila ${versionLabel} (${j + 1}/${listeningSections.length})`, 0, i);
+
+          if (section.text && !section.audioBase64) {
+            if (signal?.aborted) {
+              const err = new Error("Aborted");
+              err.name = "AbortError";
+              throw err;
+            }
+            section.audioBase64 = await generateSpeech(params.language, section.text, signal);
           }
-          section.audioBase64 = await generateSpeech(params.language, section.text, signal);
+          // Cache it for subsequent fili
+          listeningTexts[topicName] = section.text;
+          listeningAudios[topicName] = section.audioBase64 || '';
         }
         completedUnits += 1;
       }
@@ -375,6 +398,14 @@ export async function generateQuizzes(
       await new Promise(resolve => setTimeout(resolve, 500));
     }
   }
+
+  // Standardize titles for all versions: same base title, each with the Fila letter suffix
+  const rawBaseTitle = results[0]?.title || 'Verifica';
+  const baseTitle = rawBaseTitle.replace(/\s*-\s*Fila\s+[A-Z]/i, '').trim();
+  results.forEach((quiz, i) => {
+    const label = quiz.versionLabel || String.fromCharCode(65 + i);
+    quiz.title = `${baseTitle} - Fila ${label}`;
+  });
 
   if (onProgress) onProgress({ percentage: 100, message: 'Processo completato!', currentVersion: numVersions, totalVersions: numVersions });
   return results;
@@ -421,7 +452,8 @@ export async function regenerateComplexSection(
   topic: string,
   sectionType: 'reading' | 'listening',
   config: TopicRequest['reading'] | TopicRequest['listening'],
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  customTranscript?: string
 ): Promise<ReadingSection | ListeningSection> {
 
   let exercisesDetails = '';
@@ -429,7 +461,11 @@ export async function regenerateComplexSection(
     .filter(([, count]) => count > 0)
     .map(([type, count]) => {
       const enumString = getQuestionTypeEnumString(type);
-      return `- ${type} (usa il questionType "${enumString}"): ESATTAMENTE ${count} domande`;
+      let extra = '';
+      if (type.includes('Vero/Falso')) {
+        extra = ' con SOLO due opzioni: "Vero" e "Falso"';
+      }
+      return `- ${type} (usa il questionType "${enumString}"): ESATTAMENTE ${count} domande${extra}`;
     })
     .join('\n');
 
@@ -439,6 +475,10 @@ export async function regenerateComplexSection(
   if (sectionType === 'reading') {
     const readConfig = config as TopicRequest['reading'];
     schema = readingSectionSchema;
+    let directivesText = '';
+    if (readConfig.directives) {
+      directivesText = `\n  - Suggerimenti/Direttive speciali per la lettura: ${readConfig.directives}`;
+    }
     if (readConfig.mode === 'custom' && readConfig.customText) {
       prompt = `
                 Crea un esercizio di Reading Comprehension in ${language}.
@@ -449,7 +489,7 @@ export async function regenerateComplexSection(
                 ${readConfig.customText}
                 """
                 Basandoti SUL TESTO FORNITO, genera le seguenti domande:
-                ${exerciseCounts}
+                ${exerciseCounts}${directivesText}
                 
                 IMPORTANTE: Le istruzioni generali o le frasi di partenza per gli esercizi di traduzione devono essere in italiano, dato che gli studenti sono di madrelingua italiana.
              `;
@@ -460,7 +500,7 @@ export async function regenerateComplexSection(
                 **Livello:** ${level}
                 Genera un testo di circa ${readConfig.wordCount || 150} parole.
                 Basandoti sul testo generato, crea le seguenti domande:
-                ${exerciseCounts}
+                ${exerciseCounts}${directivesText}
                 
                 IMPORTANTE: Le istruzioni generali o le frasi di partenza per gli esercizi di traduzione devono essere in italiano, dato che gli studenti sono di madrelingua italiana.
              `;
@@ -468,22 +508,48 @@ export async function regenerateComplexSection(
   } else {
     const listenConfig = config as TopicRequest['listening'];
     schema = listeningSectionSchema;
-    prompt = `
+    let directivesText = '';
+    if (listenConfig.directives) {
+      directivesText = `\n            - Suggerimenti/Direttive per l'audio: ${listenConfig.directives}`;
+    }
+
+    if (customTranscript) {
+      prompt = `
             Crea un esercizio di Ascolto (Listening) in ${language}.
             **Argomento:** ${topic}
             **Livello:** ${level}
-            Genera un transcript (testo) adatto per un audio di ${listenConfig.durationSeconds} secondi.
+            **Testo dell'audio (Transcript) prefissato**:
+            """
+            ${customTranscript}
+            """
+            Usa ESATTAMENTE il testo sopra per l'audio (non modificarlo).
+            Basandoti su questo transcript specifico, crea le seguenti domande (che devono essere diverse e uniche rispetto alle altre file):
+            ${exerciseCounts}
+            
+            IMPORTANTE: Le istruzioni generali o le frasi di partenza per gli esercizi di traduzione devono essere in italiano, dato che gli studenti sono di madrelingua italiana.
+         `;
+    } else {
+      prompt = `
+            Crea un esercizio di Ascolto (Listening) in ${language}.
+            **Argomento:** ${topic}
+            **Livello:** ${level}
+            Genera un transcript (testo) adatto per un audio di ${listenConfig.durationSeconds} secondi.${directivesText}
             Basandoti sul transcript, crea le seguenti domande:
             ${exerciseCounts}
             
             IMPORTANTE: Le istruzioni generali o le frasi di partenza per gli esercizi di traduzione devono essere in italiano, dato che gli studenti sono di madrelingua italiana.
          `;
+    }
   }
 
   const data = await makeApiCall(prompt, schema, signal);
 
   if (sectionType === 'listening' && data.text) {
-    data.audioBase64 = await generateSpeech(language, data.text, signal);
+    if (customTranscript) {
+      data.text = customTranscript; // Force exact match
+    } else {
+      data.audioBase64 = await generateSpeech(language, data.text, signal);
+    }
   }
 
   return data;

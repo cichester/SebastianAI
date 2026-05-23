@@ -18,25 +18,30 @@ router.post('/create', async (req, res) => {
     const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
     // Costruiamo un HTML semplificato che Google Drive convertirà in Doc
-    let htmlContent = `<h1 style="text-align: center;">${quiz.title}</h1>`;
-    htmlContent += `<p>Nome e Cognome: _________________________<br>Classe: _________________________<br>Data: _________________________</p><hr>`;
+    const topics = new Set();
+    if (quiz.listeningSections) quiz.listeningSections.forEach(ls => { if (ls.topic) topics.add(ls.topic); });
+    if (quiz.readingSections) quiz.readingSections.forEach(rs => { if (rs.topic) topics.add(rs.topic); });
+    if (quiz.questions) quiz.questions.forEach(q => { if (q.topic) topics.add(q.topic); });
+    if (quiz.writingPrompts) quiz.writingPrompts.forEach(wp => { if (wp.topic) topics.add(wp.topic); });
 
     const answerKey = [];
     let qNum = 1;
 
-    // Raccogliamo tutti i topic
-    const topics = new Set();
-    if (quiz.listeningSections) quiz.listeningSections.forEach(ls => topics.add(ls.topic));
-    if (quiz.readingSections) quiz.readingSections.forEach(rs => topics.add(rs.topic));
-    if (quiz.questions) quiz.questions.forEach(q => topics.add(q.topic));
-    if (quiz.writingPrompts) quiz.writingPrompts.forEach(wp => topics.add(wp.topic));
+    let htmlContent = `<h1 style="text-align: center;">${quiz.title}</h1>`;
+    htmlContent += `<p>Nome e Cognome: _________________________<br>Classe: _________________________<br>Data: _________________________</p><hr>`;
+
+    const listeningTranscripts = [];
+    if (quiz.listeningSections) {
+      quiz.listeningSections.forEach(section => {
+        listeningTranscripts.push(`<p><strong>Trascrizione Listening (${section.topic}):</strong></p><p style="background-color: #DCEAFB; font-style: italic; padding: 10px;">${section.text}</p>`);
+      });
+    }
 
     Array.from(topics).forEach(topic => {
       htmlContent += `<h2>${topic}</h2>`;
 
       (quiz.listeningSections || []).filter(ls => ls.topic === topic).forEach(section => {
         htmlContent += `<h3>Listening Exercise</h3>`;
-        htmlContent += `<p style="background-color: #DCEAFB; font-style: italic; padding: 10px;">${section.text}</p>`;
         section.questions.forEach(q => { htmlContent += formatQuestionForHtml(q, qNum++, answerKey); });
       });
 
@@ -58,7 +63,11 @@ router.post('/create', async (req, res) => {
     });
 
     // Answer Key
-    htmlContent += `<h1 style="page-break-before: always;">Answer Key</h1><ul>`;
+    htmlContent += `<h1 style="page-break-before: always;">Answer Key</h1>`;
+    if (listeningTranscripts.length > 0) {
+      htmlContent += `<h2>Listening Transcripts</h2>` + listeningTranscripts.join('') + `<br><hr><br>`;
+    }
+    htmlContent += `<h2>Answers</h2><ul>`;
     answerKey.forEach(answer => {
       htmlContent += `<li>${answer}</li>`;
     });

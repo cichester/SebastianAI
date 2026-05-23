@@ -15,8 +15,8 @@ import SupportModal from './components/SupportModal';
 import { SunIcon, MoonIcon } from './components/icons';
 import { generateQuiz, regenerateQuestions, regenerateComplexSection, regenerateWritingPrompt, type GenerationProgress } from './services/geminiService';
 import { validateQuizDraft, validateRegeneratedQuestions, validateRegeneratedComplexSection, validateRegeneratedWritingPrompt } from './utils/validation';
-import type { Quiz, QuizGenerationParams, Question, HistoryEntry, ReadingSection, ListeningSection, WritingPrompt } from './types';
-import { PdfFormat } from './types';
+import type { Quiz, QuizGenerationParams, Question, HistoryEntry, ReadingSection, ListeningSection, WritingPrompt, AddExerciseParams } from './types';
+import { PdfFormat, QuestionType } from './types';
 import { HISTORY_KEY } from './constants';
 import { safeGetItem, safeSetItem, safeRemoveItem } from './utils/storage';
 
@@ -796,8 +796,22 @@ const App: React.FC = () => {
   const handleUpdateQuiz = useCallback((index: number, updatedQuiz: Quiz) => {
     setQuizDraft(currentDraft => {
         if (!currentDraft) return null;
-        const newDrafts = [...currentDraft];
-        newDrafts[index] = updatedQuiz;
+        let newDrafts = [...currentDraft];
+        
+        // If the title is being updated, apply the base title change to all drafts
+        const oldQuiz = currentDraft[index];
+        if (oldQuiz && oldQuiz.title !== updatedQuiz.title) {
+            const cleanTitle = updatedQuiz.title.replace(/\s*-\s*Fila\s+[A-Z]/i, '').trim();
+            newDrafts = newDrafts.map((quiz, i) => {
+                const label = quiz.versionLabel || String.fromCharCode(65 + i);
+                return {
+                    ...quiz,
+                    title: `${cleanTitle} - Fila ${label}`
+                };
+            });
+        } else {
+            newDrafts[index] = updatedQuiz;
+        }
         
         // Sync with history if there's a match by title or if we want to be more proactive
         // In this app, the current quiz draft isn't strictly tied to one history ID in state,
@@ -819,6 +833,262 @@ const App: React.FC = () => {
         return newDrafts;
     });
   }, []);
+
+  const handleRemoveExercise = useCallback((topic: string, kind: 'standard' | 'reading' | 'listening' | 'writing', subtype?: string) => {
+    setQuizDraft(currentDraft => {
+      if (!currentDraft) return null;
+      
+      const newDrafts = currentDraft.map(quiz => {
+        const updatedQuiz = { ...quiz };
+        if (kind === 'reading' && updatedQuiz.readingSections) {
+          updatedQuiz.readingSections = updatedQuiz.readingSections.filter(s => s.topic !== topic);
+        } else if (kind === 'listening' && updatedQuiz.listeningSections) {
+          updatedQuiz.listeningSections = updatedQuiz.listeningSections.filter(s => s.topic !== topic);
+        } else if (kind === 'writing' && updatedQuiz.writingPrompts) {
+          updatedQuiz.writingPrompts = updatedQuiz.writingPrompts.filter(p => p.topic !== topic);
+        } else if (kind === 'standard') {
+          const questionTypeMap: {[key: string]: string} = {
+            'Scelta Multipla': 'MULTIPLE_CHOICE',
+            'Completa gli Spazi': 'FILL_IN_THE_BLANK',
+            'Risposta Breve': 'SHORT_ANSWER',
+            'Traduzione': 'TRANSLATION',
+          };
+          const mappedType = subtype ? questionTypeMap[subtype] : null;
+          updatedQuiz.questions = updatedQuiz.questions.filter(
+            q => !(q.topic === topic && (!mappedType || q.questionType === mappedType))
+          );
+        }
+        return updatedQuiz;
+      });
+
+      // Sync with history
+      setHistory(currentHistory => {
+        if (currentHistory.length === 0) return currentHistory;
+        const updatedHistory = [...currentHistory];
+        if (updatedHistory[0].quizzes.length === newDrafts.length) {
+          updatedHistory[0] = { ...updatedHistory[0], quizzes: newDrafts };
+          if (auth.currentUser) {
+            saveUserHistory(auth.currentUser.uid, updatedHistory).catch(console.error);
+          }
+        }
+        return updatedHistory;
+      });
+
+      return newDrafts;
+    });
+  }, []);
+
+  const handleAddExercise = useCallback(async (params: AddExerciseParams) => {
+    if (!quizParams || !quizDraft) return;
+
+    setIsLoading(true);
+    setGenerationProgress({ percentage: 0, message: 'Inizializzazione aggiunta esercizio...' });
+    setError(null);
+
+    const controller = new AbortController();
+    const signal = controller.signal;
+
+    try {
+      const language = quizParams.language;
+      const level = quizParams.level;
+      const numVersions = quizDraft.length;
+      
+      // We will build the new components for each quiz version in the draft
+      const newItemsPerVersion: Array<{
+        questions?: Question[];
+        reading?: ReadingSection;
+        listening?: ListeningSection;
+        writing?: WritingPrompt;
+      }> = Array.from({ length: numVersions }, () => ({}));
+
+      if (params.mode === 'manual') {
+        // Manual mode: just add empty structures
+        for (let i = 0; i < numVersions; i++) {
+          if (params.kind === 'standard') {
+            const questionTypeMap: {[key: string]: string} = {
+              'Scelta Multipla': QuestionType.MULTIPLE_CHOICE,
+              'Completa gli Spazi': QuestionType.FILL_IN_THE_BLANK,
+              'Risposta Breve': QuestionType.SHORT_ANSWER,
+              'Traduzione': QuestionType.TRANSLATION,
+            };
+            const mappedType = questionTypeMap[params.standardType || 'Scelta Multipla'];
+            const count = params.standardCount || 5;
+            
+            const blankQuestions: Question[] = Array.from({ length: count }, () => ({
+              questionText: 'Nuova domanda (fai doppio clic per modificare)',
+              questionType: mappedType as QuestionType,
+              topic: params.topic,
+              options: mappedType === QuestionType.MULTIPLE_CHOICE ? [
+                { text: 'Opzione A', isCorrect: true },
+                { text: 'Opzione B', isCorrect: false },
+                { text: 'Opzione C', isCorrect: false },
+                { text: 'Opzione D', isCorrect: false },
+              ] : undefined,
+              correctAnswer: 'Risposta corretta',
+            }));
+            newItemsPerVersion[i].questions = blankQuestions;
+          } else if (params.kind === 'reading') {
+            const count = params.readingQuestionCount || 3;
+            const blankQuestions: Question[] = Array.from({ length: count }, () => ({
+              questionText: 'Nuova domanda di comprensione (fai doppio clic per modificare)',
+              questionType: QuestionType.MULTIPLE_CHOICE,
+              topic: params.topic,
+              options: [
+                { text: 'Opzione A', isCorrect: true },
+                { text: 'Opzione B', isCorrect: false },
+                { text: 'Opzione C', isCorrect: false },
+                { text: 'Opzione D', isCorrect: false },
+              ],
+            }));
+            newItemsPerVersion[i].reading = {
+              topic: params.topic,
+              text: 'Inserisci qui il testo di lettura...',
+              questions: blankQuestions,
+            };
+          } else if (params.kind === 'writing') {
+            newItemsPerVersion[i].writing = {
+              topic: params.topic,
+              promptText: 'Inserisci qui la traccia di scrittura...',
+              wordLimit: params.writingWordLimit || 100,
+            };
+          } else if (params.kind === 'listening') {
+            const count = params.listeningQuestionCount || 3;
+            const blankQuestions: Question[] = Array.from({ length: count }, () => ({
+              questionText: 'Nuova domanda di ascolto (fai doppio clic per modificare)',
+              questionType: QuestionType.MULTIPLE_CHOICE,
+              topic: params.topic,
+              options: [
+                { text: 'Opzione A', isCorrect: true },
+                { text: 'Opzione B', isCorrect: false },
+                { text: 'Opzione C', isCorrect: false },
+                { text: 'Opzione D', isCorrect: false },
+              ],
+            }));
+            newItemsPerVersion[i].listening = {
+              topic: params.topic,
+              text: 'Inserisci qui la trascrizione dell\'audio...',
+              questions: blankQuestions,
+              audioBase64: '', // No audio for manually created empty section initially
+            };
+          }
+        }
+      } else {
+        // AI mode: call Gemini API for each version
+        // For listening: we share the same transcript/audio across versions!
+        let sharedListeningTranscript = '';
+        let sharedListeningAudio = '';
+
+        for (let i = 0; i < numVersions; i++) {
+          const versionLabel = String.fromCharCode(65 + i);
+          setGenerationProgress({
+            percentage: Math.round((i / numVersions) * 100),
+            message: `Generazione esercizio per Fila ${versionLabel}...`
+          });
+
+          if (params.kind === 'standard') {
+            const type = params.standardType || 'Scelta Multipla';
+            const count = params.standardCount || 5;
+            const newQs = await regenerateQuestions(language, level, params.topic, type, count, signal);
+            newItemsPerVersion[i].questions = newQs;
+          } else if (params.kind === 'reading') {
+            const config = {
+              enabled: true,
+              mode: 'generate' as const,
+              customText: '',
+              wordCount: params.readingWordCount || 150,
+              exercises: { [params.readingExerciseType || 'Scelta Multipla']: params.readingQuestionCount || 3 }
+            };
+            const readingSec = await regenerateComplexSection(language, level, params.topic, 'reading', config, signal) as ReadingSection;
+            newItemsPerVersion[i].reading = readingSec;
+          } else if (params.kind === 'writing') {
+            const config = {
+              enabled: true,
+              wordLimit: params.writingWordLimit || 100,
+              directives: params.writingDirectives || '',
+            };
+            const writingPrompt = await regenerateWritingPrompt(language, level, params.topic, config, signal);
+            newItemsPerVersion[i].writing = writingPrompt;
+          } else if (params.kind === 'listening') {
+            const config = {
+              enabled: true,
+              durationSeconds: params.listeningDurationSeconds || 60,
+              exercises: { [params.listeningExerciseType || 'Scelta Multipla']: params.listeningQuestionCount || 3 },
+              directives: params.listeningDirectives || '',
+            };
+            
+            if (i === 0) {
+              // Fila A: generate transcript, questions, and audio
+              const listeningSec = await regenerateComplexSection(language, level, params.topic, 'listening', config, signal) as ListeningSection;
+              newItemsPerVersion[i].listening = listeningSec;
+              sharedListeningTranscript = listeningSec.text;
+              sharedListeningAudio = listeningSec.audioBase64 || '';
+            } else {
+              // Fila B, C...: use Fila A's transcript to generate different questions
+              const listeningSec = await regenerateComplexSection(
+                language,
+                level,
+                params.topic,
+                'listening',
+                config,
+                signal,
+                sharedListeningTranscript
+              ) as ListeningSection;
+              
+              // Force exactly same transcript and audio
+              listeningSec.text = sharedListeningTranscript;
+              listeningSec.audioBase64 = sharedListeningAudio;
+              newItemsPerVersion[i].listening = listeningSec;
+            }
+          }
+        }
+      }
+
+      // Apply the new items to the quizDraft state
+      setQuizDraft(currentDraft => {
+        if (!currentDraft) return null;
+        const newDrafts = currentDraft.map((quiz, i) => {
+          const updatedQuiz = { ...quiz };
+          const items = newItemsPerVersion[i];
+          
+          if (items.questions) {
+            updatedQuiz.questions = [...updatedQuiz.questions, ...items.questions];
+          }
+          if (items.reading) {
+            updatedQuiz.readingSections = [...(updatedQuiz.readingSections || []), items.reading];
+          }
+          if (items.writing) {
+            updatedQuiz.writingPrompts = [...(updatedQuiz.writingPrompts || []), items.writing];
+          }
+          if (items.listening) {
+            updatedQuiz.listeningSections = [...(updatedQuiz.listeningSections || []), items.listening];
+          }
+          return updatedQuiz;
+        });
+
+        // Sync with history
+        setHistory(currentHistory => {
+          if (currentHistory.length === 0) return currentHistory;
+          const updatedHistory = [...currentHistory];
+          if (updatedHistory[0].quizzes.length === newDrafts.length) {
+            updatedHistory[0] = { ...updatedHistory[0], quizzes: newDrafts };
+            if (auth.currentUser) {
+              saveUserHistory(auth.currentUser.uid, updatedHistory).catch(console.error);
+            }
+          }
+          return updatedHistory;
+        });
+
+        return newDrafts;
+      });
+
+    } catch (e: any) {
+      if (e.name !== 'AbortError') {
+        setError(e.message || "Errore durante l'aggiunta dell'esercizio.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [quizParams, quizDraft]);
 
   if (!authChecked) {
     return (
@@ -1058,6 +1328,8 @@ const App: React.FC = () => {
                    onRegenerateComplexSection={handleRegenerateComplexSection}
                    onRegenerateWritingPrompt={handleRegenerateWritingPrompt}
                    onUpdateQuiz={handleUpdateQuiz}
+                   onRemoveExercise={handleRemoveExercise}
+                   onAddExercise={handleAddExercise}
                    pdfFormat={pdfFormat}
                    isCreating={formCreationState.status === 'loading' || docCreationState.status === 'loading'}
                    isRegeneratingId={isRegenerating}

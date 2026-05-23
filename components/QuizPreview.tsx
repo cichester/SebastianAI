@@ -3,7 +3,7 @@ import React, { useMemo, useState, useRef } from 'react';
 import html2pdf from 'html2pdf.js';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
-import type { Quiz, Question, QuestionOption, ReadingSection, WritingPrompt, ListeningSection } from '../types';
+import type { Quiz, Question, QuestionOption, ReadingSection, WritingPrompt, ListeningSection, AddExerciseParams } from '../types';
 import { QuestionType, PdfFormat } from '../types';
 import { CheckIcon, SparklesIcon, SpeakerWaveIcon, PrinterIcon } from './icons';
 import LoadingSpinner from './LoadingSpinner';
@@ -20,6 +20,8 @@ interface QuizPreviewProps {
   onRegenerateComplexSection: (quizIndex: number, sectionType: 'reading' | 'listening', topic: string) => void;
   onRegenerateWritingPrompt: (quizIndex: number, topic: string) => void;
   onUpdateQuiz: (quizIndex: number, updatedQuiz: Quiz) => void;
+  onRemoveExercise: (topic: string, exerciseType: 'standard' | 'reading' | 'listening' | 'writing', questionSubtype?: string) => void;
+  onAddExercise: (params: AddExerciseParams) => Promise<void>;
   pdfFormat: PdfFormat;
   isCreating: boolean;
   isRegeneratingId: string | null;
@@ -351,7 +353,7 @@ const ListeningSectionCard: React.FC<{ section: ListeningSection; onRegenerate: 
     );
 };
 
-const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateForm, onCreateDoc, onRegenerate, onRegenerateSection, onRegenerateComplexSection, onRegenerateWritingPrompt, onUpdateQuiz, pdfFormat, isCreating, isRegeneratingId, formCreationStateUI, docCreationStateUI }) => {
+const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateForm, onCreateDoc, onRegenerate, onRegenerateSection, onRegenerateComplexSection, onRegenerateWritingPrompt, onUpdateQuiz, onRemoveExercise, onAddExercise, pdfFormat, isCreating, isRegeneratingId, formCreationStateUI, docCreationStateUI }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
@@ -364,7 +366,32 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
   const manualItemsRefs = useRef<(HTMLDivElement | null)[]>([]);
   const manualWritingRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  const generateSingleClassicPDF = async (quiz: Quiz) => {
+  // Refs per la composizione manuale del PDF Docente
+  const manualHeaderTeacherRef = useRef<HTMLDivElement>(null);
+  const manualItemsTeacherRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const manualWritingTeacherRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  // Stato per l'aggiunta di un esercizio
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addParams, setAddParams] = useState<AddExerciseParams>({
+    topic: '',
+    kind: 'standard',
+    mode: 'ai',
+    standardType: 'Scelta Multipla',
+    standardCount: 5,
+    readingWordCount: 150,
+    readingExerciseType: 'Scelta Multipla',
+    readingQuestionCount: 3,
+    writingWordLimit: 100,
+    writingDirectives: '',
+    listeningDurationSeconds: 60,
+    listeningExerciseType: 'Scelta Multipla',
+    listeningQuestionCount: 3,
+    listeningDirectives: '',
+  });
+  const [isAddingExercise, setIsAddingExercise] = useState(false);
+
+  const generateSingleClassicPDF = async (quiz: Quiz, isTeacher: boolean) => {
       // Misure esatte per A4 @ 96 DPI (1px ≈ 1/96 pollice)
       // A4: 210mm x 297mm -> 794px x 1123px
       const A4_WIDTH = 794;
@@ -392,18 +419,20 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
 
 
       // 1. RENDERIZZA L'INTESTAZIONE
-      if (manualHeaderRef.current) {
-        const canvas = await html2canvas(manualHeaderRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      const headerEl = (isTeacher ? manualHeaderTeacherRef : manualHeaderRef).current;
+      if (headerEl) {
+        const canvas = await html2canvas(headerEl, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
         const imgData = canvas.toDataURL('image/jpeg', 0.95);
-        const headerH = manualHeaderRef.current.offsetHeight;
+        const headerH = headerEl.offsetHeight;
         doc.addImage(imgData, 'JPEG', MARGIN, MARGIN, 714, headerH);
         currentYLeft = MARGIN + headerH + 25;
         currentYRight = MARGIN + headerH + 25;
       }
 
+      const itemsRefsArray = (isTeacher ? manualItemsTeacherRefs : manualItemsRefs).current;
       // 2. RENDERIZZA GLI ELEMENTI GRANULARI UNO PER UNO
-      for (let i = 0; i < manualItemsRefs.current.length; i++) {
-        const el = manualItemsRefs.current[i];
+      for (let i = 0; i < itemsRefsArray.length; i++) {
+        const el = itemsRefsArray[i];
         if (!el) continue;
 
         const unit = pdfUnits[i];
@@ -479,8 +508,9 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
       // Determina Y di partenza come il MASSIMO delle due colonne
       let currentYFull = Math.max(currentYLeft, currentYRight);
 
-      for (let i = 0; i < manualWritingRefs.current.length; i++) {
-        const el = manualWritingRefs.current[i];
+      const writingRefsArray = (isTeacher ? manualWritingTeacherRefs : manualWritingRefs).current;
+      for (let i = 0; i < writingRefsArray.length; i++) {
+        const el = writingRefsArray[i];
         if (!el) continue;
         
         const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
@@ -510,14 +540,17 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
       }
 
       const label = quiz.versionLabel || 'A';
-      doc.save(`${quiz.title || 'Quiz'}_Fila_${label}.pdf`);
+      const suffix = isTeacher ? '_Soluzioni' : '';
+      const cleanTitle = (quiz.title || 'Quiz').replace(/\s*-\s*Fila\s+[A-Z]/i, '').trim();
+      doc.save(`${cleanTitle}_Fila_${label}${suffix}.pdf`);
   };
 
   const handlePrintClassicManual = async () => {
     if (!activeQuiz) return;
     setIsPrinting(true);
     try {
-      await generateSingleClassicPDF(activeQuiz);
+      await generateSingleClassicPDF(activeQuiz, false);
+      await generateSingleClassicPDF(activeQuiz, true);
     } catch (err) {
       console.error("Error processing manual PDF composition:", err);
     } finally {
@@ -534,23 +567,43 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
            setActiveTab(i);
            // Aspetta che React aggiorni lo stato e i ref del DOM
            await new Promise(resolve => setTimeout(resolve, 650));
-           await generateSingleClassicPDF(quizzes[i]);
+           await generateSingleClassicPDF(quizzes[i], false);
+           await generateSingleClassicPDF(quizzes[i], true);
          }
          setActiveTab(originalTab);
       } else {
          // MODERNO / FORMALE: Stampa tutti i PDF usando i container pre-renderizzati
          for (let i = 0; i < quizzes.length; i++) {
-           const element = document.getElementById(`pdf-container-${i}`);
-           if (!element) continue;
-           const opt = {
-             margin:       10,
-             filename:     `${quizzes[i].title || 'Quiz'}_Fila_${quizzes[i].versionLabel || String.fromCharCode(65 + i)}.pdf`,
-             image:        { type: 'jpeg' as const, quality: 0.98 },
-             html2canvas:  { scale: 2, useCORS: true, windowWidth: 1024 },
-             jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
-           };
-           await html2pdf().set(opt).from(element).save();
-           await new Promise(resolve => setTimeout(resolve, 500));
+           const cleanTitle = (quizzes[i].title || 'Quiz').replace(/\s*-\s*Fila\s+[A-Z]/i, '').trim();
+           const label = quizzes[i].versionLabel || String.fromCharCode(65 + i);
+
+           // Versione Studente
+           const studentElement = document.getElementById(`pdf-container-student-${i}`);
+           if (studentElement) {
+             const opt = {
+               margin:       10,
+               filename:     `${cleanTitle}_Fila_${label}.pdf`,
+               image:        { type: 'jpeg' as const, quality: 0.98 },
+               html2canvas:  { scale: 2, useCORS: true, windowWidth: 1024 },
+               jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
+             };
+             await html2pdf().set(opt).from(studentElement).save();
+             await new Promise(resolve => setTimeout(resolve, 500));
+           }
+
+           // Versione Docente
+           const teacherElement = document.getElementById(`pdf-container-teacher-${i}`);
+           if (teacherElement) {
+             const opt = {
+               margin:       10,
+               filename:     `${cleanTitle}_Fila_${label}_Soluzioni.pdf`,
+               image:        { type: 'jpeg' as const, quality: 0.98 },
+               html2canvas:  { scale: 2, useCORS: true, windowWidth: 1024 },
+               jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
+             };
+             await html2pdf().set(opt).from(teacherElement).save();
+             await new Promise(resolve => setTimeout(resolve, 500));
+           }
          }
       }
     } catch (error) {
@@ -792,25 +845,37 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
                     )}
                 </button>
              </div>
-             
-             <div className="p-8 space-y-8">
+                     <div className="p-8 space-y-8">
                {/* Sections mapped below */}
                {activeQuiz.listeningSections?.map((section, i) => {
                     const regenId = `complex-listening-${section.topic}`;
                     const isCurrentRegen = isRegeneratingId === regenId;
                      return (
-                         <div key={`listen-sec-${i}`}>
-                            <h3 className="text-xl font-bold text-indigo-700 dark:text-indigo-400 mb-4 pb-2 border-b-2 border-indigo-200 dark:border-indigo-800 print:text-black print:border-slate-300">{section.topic}</h3>
-                            <ListeningSectionCard 
-                                section={section}
-                                onRegenerate={() => onRegenerateComplexSection(activeTab, 'listening', section.topic)}
-                                isRegenerating={isCurrentRegen}
-                                isAnyActionInProgress={isAnyActionInProgress}
-                                isEditing={isEditing}
-                                onUpdate={(updatedS) => handleListeningSectionUpdate(i, updatedS)}
-                            />
-                        </div>
-                    )
+                          <div key={`listen-sec-${i}`}>
+                             <div className="flex justify-between items-center mb-4 border-b-2 border-indigo-200 dark:border-indigo-800 pb-2">
+                               <h3 className="text-xl font-bold text-indigo-700 dark:text-indigo-400 print:text-black print:border-slate-300">{section.topic} - Esercizio di Ascolto</h3>
+                               {isEditing && (
+                                 <button 
+                                     onClick={() => onRemoveExercise(section.topic, 'listening')}
+                                     className="flex items-center text-xs font-semibold text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 transition print:hidden bg-red-100/50 dark:bg-red-900/30 px-3 py-1.5 rounded-full ml-4"
+                                 >
+                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 mr-1">
+                                         <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.34 9m-4.72 0-.34-9m9.96-3-3.2 3.2m-7.24 0L6.76 6M21 6H3m3.76-3h10.48M19 6V19a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14Z" />
+                                     </svg>
+                                     <span>Elimina Esercizio</span>
+                                 </button>
+                               )}
+                             </div>
+                             <ListeningSectionCard 
+                                 section={section}
+                                 onRegenerate={() => onRegenerateComplexSection(activeTab, 'listening', section.topic)}
+                                 isRegenerating={isCurrentRegen}
+                                 isAnyActionInProgress={isAnyActionInProgress}
+                                 isEditing={isEditing}
+                                 onUpdate={(updatedS) => handleListeningSectionUpdate(i, updatedS)}
+                             />
+                         </div>
+                     )
                 })}
 
                 {activeQuiz.readingSections?.map((section, i) => {
@@ -818,13 +883,26 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
                     const isCurrentRegen = isRegeneratingId === regenId;
                     return (
                         <div key={`read-sec-${i}`}>
-                            <h3 className="text-xl font-bold text-indigo-700 dark:text-indigo-400 mb-4 pb-2 border-b-2 border-indigo-200 dark:border-indigo-800 print:text-black print:border-slate-300">{section.topic}</h3>
+                            <div className="flex justify-between items-center mb-4 border-b-2 border-indigo-200 dark:border-indigo-800 pb-2">
+                              <h3 className="text-xl font-bold text-indigo-700 dark:text-indigo-400 print:text-black print:border-slate-300">{section.topic} - Comprensione del Testo</h3>
+                              {isEditing && (
+                                <button 
+                                    onClick={() => onRemoveExercise(section.topic, 'reading')}
+                                    className="flex items-center text-xs font-semibold text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 transition print:hidden bg-red-100/50 dark:bg-red-900/30 px-3 py-1.5 rounded-full ml-4"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 mr-1">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.34 9m-4.72 0-.34-9m9.96-3-3.2 3.2m-7.24 0L6.76 6M21 6H3m3.76-3h10.48M19 6V19a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14Z" />
+                                    </svg>
+                                    <span>Elimina Esercizio</span>
+                                </button>
+                              )}
+                            </div>
                             <ReadingSectionCard
                                 section={section}
                                 onRegenerate={() => onRegenerateComplexSection(activeTab, 'reading', section.topic)}
                                 isRegenerating={isCurrentRegen}
                                 isAnyActionInProgress={isAnyActionInProgress}
-                                isEditing={isEditing}
+                                  isEditing={isEditing}
                                 onUpdate={(updatedS) => handleReadingSectionUpdate(i, updatedS)}
                             />
                         </div>
@@ -838,21 +916,34 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
                       <section key={regenId}>
                         <div className="flex justify-between items-center mb-4">
                             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 pb-2 transition-colors print:text-black print:border-slate-300">{topic} - {type}</h3>
-                            {!isEditing && (
+                            <div className="flex gap-2">
+                              {isEditing && (
                                 <button 
-                                    onClick={() => onRegenerateSection(activeTab, topic, type.replace(' (Multiple Choice)', ''), questions.length)}
-                                    disabled={isAnyActionInProgress}
-                                    title="Rigenera solo questo esercizio, il resto del compito rimarrà invariato."
-                                    className="flex items-center text-xs font-semibold text-indigo-700 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 disabled:opacity-50 disabled:cursor-not-allowed transition print:hidden bg-indigo-100/50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-full"
+                                    onClick={() => onRemoveExercise(topic, 'standard', type)}
+                                    className="flex items-center text-xs font-semibold text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 transition print:hidden bg-red-100/50 dark:bg-red-900/30 px-3 py-1.5 rounded-full"
                                 >
-                                     {isCurrentRegen ? (
-                                         <LoadingSpinner className="mr-2" dotClassName="w-1 h-1" />
-                                     ) : (
-                                         <SparklesIcon className="w-4 h-4 mr-1" />
-                                     )}
-                                    <span>{isCurrentRegen ? 'Rigenero...' : 'Rigenera solo questa sezione'}</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 mr-1">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.34 9m-4.72 0-.34-9m9.96-3-3.2 3.2m-7.24 0L6.76 6M21 6H3m3.76-3h10.48M19 6V19a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14Z" />
+                                    </svg>
+                                    <span>Elimina Esercizio</span>
                                 </button>
-                            )}
+                              )}
+                              {!isEditing && (
+                                  <button 
+                                      onClick={() => onRegenerateSection(activeTab, topic, type.replace(' (Multiple Choice)', ''), questions.length)}
+                                      disabled={isAnyActionInProgress}
+                                      title="Rigenera solo questo esercizio, il resto del compito rimarrà invariato."
+                                      className="flex items-center text-xs font-semibold text-indigo-700 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 disabled:opacity-50 disabled:cursor-not-allowed transition print:hidden bg-indigo-100/50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-full"
+                                  >
+                                       {isCurrentRegen ? (
+                                           <LoadingSpinner className="mr-2" dotClassName="w-1 h-1" />
+                                       ) : (
+                                           <SparklesIcon className="w-4 h-4 mr-1" />
+                                       )}
+                                      <span>{isCurrentRegen ? 'Rigenero...' : 'Rigenera solo questa sezione'}</span>
+                                  </button>
+                              )}
+                            </div>
                         </div>
                         <div className="space-y-6 flex flex-col max-w-full overflow-hidden">
                           {questions.map(({q, originalIndex}, i) => {
@@ -876,7 +967,20 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
                     const isCurrentRegen = isRegeneratingId === regenId;
                     return (
                         <div key={`write-sec-${i}`}>
-                            <h3 className="text-xl font-bold text-indigo-700 dark:text-indigo-400 mb-4 pb-2 border-b-2 border-indigo-200 dark:border-indigo-800 print:text-black print:border-slate-300">{prompt.topic}</h3>
+                            <div className="flex justify-between items-center mb-4 border-b-2 border-indigo-200 dark:border-indigo-800 pb-2">
+                              <h3 className="text-xl font-bold text-indigo-700 dark:text-indigo-400 print:text-black print:border-slate-300">{prompt.topic} - Produzione Scritta</h3>
+                              {isEditing && (
+                                <button 
+                                    onClick={() => onRemoveExercise(prompt.topic, 'writing')}
+                                    className="flex items-center text-xs font-semibold text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 transition print:hidden bg-red-100/50 dark:bg-red-900/30 px-3 py-1.5 rounded-full ml-4"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 mr-1">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.34 9m-4.72 0-.34-9m9.96-3-3.2 3.2m-7.24 0L6.76 6M21 6H3m3.76-3h10.48M19 6V19a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14Z" />
+                                    </svg>
+                                    <span>Elimina Esercizio</span>
+                                </button>
+                              )}
+                            </div>
                             <WritingPromptCard 
                                 prompt={prompt} 
                                 onRegenerate={() => onRegenerateWritingPrompt(activeTab, prompt.topic)}
@@ -888,6 +992,273 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
                         </div>
                     );
                 })}
+
+                {/* Form per l'aggiunta dinamica di un esercizio */}
+                {isEditing && (
+                  <div className="pt-6 border-t border-slate-100 dark:border-slate-700">
+                    {!showAddForm ? (
+                      <button
+                        onClick={() => setShowAddForm(true)}
+                        className="flex items-center justify-center w-full py-4 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-emerald-500 hover:bg-emerald-50/20 dark:hover:bg-emerald-950/10 rounded-2xl text-slate-500 hover:text-emerald-600 font-bold transition-all text-sm shadow-sm"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 mr-2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                        Aggiungi Nuovo Esercizio al Compito
+                      </button>
+                    ) : (
+                      <div className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700/60 p-6 rounded-2xl shadow-inner space-y-4">
+                        <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3 mb-2">
+                          <h4 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                            <span className="p-1.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 rounded-lg">
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                              </svg>
+                            </span>
+                            Nuovo Esercizio
+                          </h4>
+                          <button onClick={() => setShowAddForm(false)} className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">Annulla</button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          {/* Argomento */}
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">Argomento (Topic)</label>
+                            <input
+                              type="text"
+                              required
+                              value={addParams.topic}
+                              placeholder="es. Past Simple, Reading..."
+                              onChange={e => setAddParams(prev => ({ ...prev, topic: e.target.value }))}
+                              className="w-full text-sm px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                            />
+                          </div>
+
+                          {/* Tipo di Esercizio */}
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">Tipo Esercizio</label>
+                            <select
+                              value={addParams.kind}
+                              onChange={e => setAddParams(prev => ({ ...prev, kind: e.target.value as any }))}
+                              className="w-full text-sm px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                            >
+                              <option value="standard">Domande Standard (Grammatica/Vocabolario)</option>
+                              <option value="reading">Lettura (Reading Comprehension)</option>
+                              <option value="listening">Ascolto (Listening Script + Audio)</option>
+                              <option value="writing">Scrittura (Writing Prompt)</option>
+                            </select>
+                          </div>
+
+                          {/* Modalità */}
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">Modalità Generazione</label>
+                            <div className="flex gap-2 text-sm bg-white dark:bg-slate-800 p-1 border border-slate-200 dark:border-slate-700 rounded-xl">
+                              <button
+                                type="button"
+                                onClick={() => setAddParams(prev => ({ ...prev, mode: 'ai' }))}
+                                className={`flex-1 py-1.5 px-3 rounded-lg font-semibold transition-all ${addParams.mode === 'ai' ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                              >
+                                Genera con IA
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setAddParams(prev => ({ ...prev, mode: 'manual' }))}
+                                className={`flex-1 py-1.5 px-3 rounded-lg font-semibold transition-all ${addParams.mode === 'manual' ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                              >
+                                Manuale
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Config specifica per standard */}
+                        {addParams.kind === 'standard' && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
+                            <div className="flex flex-col gap-1.5">
+                              <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">Sottotipo Domande</label>
+                              <select
+                                value={addParams.standardType}
+                                onChange={e => setAddParams(prev => ({ ...prev, standardType: e.target.value }))}
+                                className="w-full text-sm px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                              >
+                                <option value="Scelta Multipla">Scelta Multipla</option>
+                                <option value="Completa gli Spazi">Completa gli Spazi</option>
+                                <option value="Risposta Breve">Risposta Breve</option>
+                                <option value="Traduzione">Traduzione</option>
+                              </select>
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                              <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">Numero Domande</label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={15}
+                                value={addParams.standardCount}
+                                onChange={e => setAddParams(prev => ({ ...prev, standardCount: parseInt(e.target.value) || 5 }))}
+                                className="w-full text-sm px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Config specifica per reading */}
+                        {addParams.kind === 'reading' && (
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
+                            {addParams.mode === 'ai' && (
+                              <div className="flex flex-col gap-1.5">
+                                <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">Lunghezza Testo (Parole)</label>
+                                <input
+                                  type="number"
+                                  min={50}
+                                  max={500}
+                                  value={addParams.readingWordCount}
+                                  onChange={e => setAddParams(prev => ({ ...prev, readingWordCount: parseInt(e.target.value) || 150 }))}
+                                  className="w-full text-sm px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                                />
+                              </div>
+                            )}
+                            <div className="flex flex-col gap-1.5">
+                              <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">Sottotipo Domande di Comprensione</label>
+                              <select
+                                value={addParams.readingExerciseType}
+                                onChange={e => setAddParams(prev => ({ ...prev, readingExerciseType: e.target.value }))}
+                                className="w-full text-sm px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                              >
+                                <option value="Scelta Multipla">Scelta Multipla</option>
+                                <option value="Risposta Breve">Risposta Breve</option>
+                              </select>
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                              <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">Numero Domande</label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={10}
+                                value={addParams.readingQuestionCount}
+                                onChange={e => setAddParams(prev => ({ ...prev, readingQuestionCount: parseInt(e.target.value) || 3 }))}
+                                className="w-full text-sm px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Config specifica per writing */}
+                        {addParams.kind === 'writing' && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
+                            <div className="flex flex-col gap-1.5">
+                              <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">Limite Parole Risposta</label>
+                              <input
+                                type="number"
+                                min={10}
+                                max={1000}
+                                value={addParams.writingWordLimit}
+                                onChange={e => setAddParams(prev => ({ ...prev, writingWordLimit: parseInt(e.target.value) || 100 }))}
+                                className="w-full text-sm px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                              />
+                            </div>
+                            {addParams.mode === 'ai' && (
+                              <div className="flex flex-col gap-1.5">
+                                <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">Direttive / Istruzioni IA</label>
+                                <input
+                                  type="text"
+                                  value={addParams.writingDirectives}
+                                  placeholder="es. chiedi di scrivere una email formale..."
+                                  onChange={e => setAddParams(prev => ({ ...prev, writingDirectives: e.target.value }))}
+                                  className="w-full text-sm px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Config specifica per listening */}
+                        {addParams.kind === 'listening' && (
+                          <div className="space-y-4 pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div className="flex flex-col gap-1.5">
+                                <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">Durata Audio (Secondi)</label>
+                                <input
+                                  type="number"
+                                  min={15}
+                                  max={300}
+                                  value={addParams.listeningDurationSeconds}
+                                  onChange={e => setAddParams(prev => ({ ...prev, listeningDurationSeconds: parseInt(e.target.value) || 60 }))}
+                                  className="w-full text-sm px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                                />
+                              </div>
+                              <div className="flex flex-col gap-1.5">
+                                <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">Sottotipo Domande di Ascolto</label>
+                                <select
+                                  value={addParams.listeningExerciseType}
+                                  onChange={e => setAddParams(prev => ({ ...prev, listeningExerciseType: e.target.value }))}
+                                  className="w-full text-sm px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                                >
+                                  <option value="Scelta Multipla">Scelta Multipla</option>
+                                  <option value="Risposta Breve">Risposta Breve</option>
+                                </select>
+                              </div>
+                              <div className="flex flex-col gap-1.5">
+                                <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">Numero Domande</label>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={10}
+                                  value={addParams.listeningQuestionCount}
+                                  onChange={e => setAddParams(prev => ({ ...prev, listeningQuestionCount: parseInt(e.target.value) || 3 }))}
+                                  className="w-full text-sm px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                                />
+                              </div>
+                            </div>
+                            {addParams.mode === 'ai' && (
+                              <div className="flex flex-col gap-1.5">
+                                <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">Direttive / Istruzioni Audio</label>
+                                <input
+                                  type="text"
+                                  value={addParams.listeningDirectives}
+                                  placeholder="es. parla di una ricetta di cucina, usa accento britannico..."
+                                  onChange={e => setAddParams(prev => ({ ...prev, listeningDirectives: e.target.value }))}
+                                  className="w-full text-sm px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="flex justify-end gap-3 pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
+                          <button
+                            type="button"
+                            onClick={() => setShowAddForm(false)}
+                            className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-850 transition text-sm font-semibold"
+                          >
+                            Annulla
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!addParams.topic.trim() || isAddingExercise}
+                            onClick={async () => {
+                              if (!addParams.topic.trim()) return;
+                              setIsAddingExercise(true);
+                              try {
+                                await onAddExercise(addParams);
+                                setShowAddForm(false);
+                                // reset topic
+                                setAddParams(prev => ({ ...prev, topic: '' }));
+                              } catch (err) {
+                                console.error(err);
+                              } finally {
+                                setIsAddingExercise(false);
+                              }
+                            }}
+                            className="px-5 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition text-sm font-bold shadow-md shadow-emerald-600/10 flex items-center gap-1.5"
+                          >
+                            {isAddingExercise && <LoadingSpinner className="w-3.5 h-3.5 border-white" dotClassName="w-0.5 h-0.5" />}
+                            Aggiungi Esercizio
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
              </div>
           </div>
       </div>
@@ -895,17 +1266,22 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
       {/* Hidden container for PDF generation */}
       <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
         {quizzes.map((quiz, idx) => (
-          <div key={idx} id={`pdf-container-${idx}`}>
-            <PrintableQuiz quiz={quiz} language={language} pdfFormat={pdfFormat} />
-          </div>
+          <React.Fragment key={idx}>
+            <div id={`pdf-container-student-${idx}`}>
+              <PrintableQuiz quiz={quiz} language={language} pdfFormat={pdfFormat} isTeacher={false} />
+            </div>
+            <div id={`pdf-container-teacher-${idx}`}>
+              <PrintableQuiz quiz={quiz} language={language} pdfFormat={pdfFormat} isTeacher={true} />
+            </div>
+          </React.Fragment>
         ))}
       </div>
 
-      {/* DOM hidden specific for manual PDF measurement (Approach 1) */}
+      {/* DOM hidden specific for manual PDF measurement (Approach 1) - STUDENT */}
       {/* Usiamo box-sizing border-box e larghezza fissa per garantire misurazioni accurate */}
       <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: '794px', backgroundColor: '#ffffff', color: '#000000' }}>
         <div ref={manualHeaderRef} style={{ width: '714px', boxSizing: 'border-box', padding: '10px' }}>
-           <PrintableHeader quiz={activeQuiz} language={language} pdfFormat={pdfFormat} />
+           <PrintableHeader quiz={activeQuiz} language={language} pdfFormat={pdfFormat} isTeacher={false} />
         </div>
         
         {pdfUnits.map((unit: any, idx: number) => (
@@ -917,8 +1293,8 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
           >
             {unit.type === 'header' && <div className="mt-2"><PrintableExHeader title={unit.data.title} descKey={unit.data.descKey} displayNum={unit.data.displayNum} pdfFormat={pdfFormat} /></div>}
             {unit.type === 'reading_text' && <PrintableReadingText text={unit.text} pdfFormat={pdfFormat} />}
-            {unit.type === 'listening_text' && <PrintableListeningText text={unit.text} pdfFormat={pdfFormat} />}
-            {unit.type === 'question' && <PrintableQuestionItem question={unit.data.question} qIdx={unit.data.qIdx} pdfFormat={pdfFormat} />}
+            {unit.type === 'listening_text' && <PrintableListeningText text={unit.text} pdfFormat={pdfFormat} isTeacher={false} />}
+            {unit.type === 'question' && <PrintableQuestionItem question={unit.data.question} qIdx={unit.data.qIdx} pdfFormat={pdfFormat} isTeacher={false} />}
           </div>
         ))}
 
@@ -926,6 +1302,38 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
           <div 
             key={`m-write-${idx}`}
             ref={el => { if(el) manualWritingRefs.current[idx] = el; }}
+            style={{ width: '714px', boxSizing: 'border-box', padding: '8px', backgroundColor: '#ffffff' }}
+            className={pdfFormat === PdfFormat.CLASSIC ? 'font-serif' : 'font-sans'}
+          >
+             <PrintableWritingItem prompt={prompt} idx={idx} displayNum={writingStartNum + idx} pdfFormat={pdfFormat} />
+          </div>
+        ))}
+      </div>
+
+      {/* DOM hidden specific for manual PDF measurement (Approach 1) - TEACHER */}
+      <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: '794px', backgroundColor: '#ffffff', color: '#000000' }}>
+        <div ref={manualHeaderTeacherRef} style={{ width: '714px', boxSizing: 'border-box', padding: '10px' }}>
+           <PrintableHeader quiz={activeQuiz} language={language} pdfFormat={pdfFormat} isTeacher={true} />
+        </div>
+        
+        {pdfUnits.map((unit: any, idx: number) => (
+          <div 
+            key={`m-unit-t-${idx}`} 
+            ref={el => { if(el) manualItemsTeacherRefs.current[idx] = el; }}
+            style={{ width: '340px', boxSizing: 'border-box', padding: '2px 8px', backgroundColor: '#ffffff' }} 
+            className={pdfFormat === PdfFormat.CLASSIC ? 'font-serif' : 'font-sans'}
+          >
+            {unit.type === 'header' && <div className="mt-2"><PrintableExHeader title={unit.data.title} descKey={unit.data.descKey} displayNum={unit.data.displayNum} pdfFormat={pdfFormat} /></div>}
+            {unit.type === 'reading_text' && <PrintableReadingText text={unit.text} pdfFormat={pdfFormat} />}
+            {unit.type === 'listening_text' && <PrintableListeningText text={unit.text} pdfFormat={pdfFormat} isTeacher={true} />}
+            {unit.type === 'question' && <PrintableQuestionItem question={unit.data.question} qIdx={unit.data.qIdx} pdfFormat={pdfFormat} isTeacher={true} />}
+          </div>
+        ))}
+
+        {activeQuiz.writingPrompts?.map((prompt, idx) => (
+          <div 
+            key={`m-write-t-${idx}`}
+            ref={el => { if(el) manualWritingTeacherRefs.current[idx] = el; }}
             style={{ width: '714px', boxSizing: 'border-box', padding: '8px', backgroundColor: '#ffffff' }}
             className={pdfFormat === PdfFormat.CLASSIC ? 'font-serif' : 'font-sans'}
           >

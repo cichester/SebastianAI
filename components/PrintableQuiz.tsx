@@ -6,6 +6,7 @@ interface PrintableQuizProps {
   quiz: Quiz;
   language?: string;
   pdfFormat?: PdfFormat;
+  isTeacher?: boolean;
 }
 
 export const getQuestionTypeName = (type: QuestionType) => {
@@ -29,20 +30,22 @@ export const getExerciseDescription = (type: string) => {
   return 'Completa l\'esercizio seguendo le istruzioni.';
 }
 
-export const PrintableHeader: React.FC<{ quiz: Quiz; language?: string; pdfFormat: PdfFormat }> = ({ quiz, language, pdfFormat }) => {
+export const PrintableHeader: React.FC<{ quiz: Quiz; language?: string; pdfFormat: PdfFormat; isTeacher?: boolean }> = ({ quiz, language, pdfFormat, isTeacher }) => {
   if (pdfFormat === PdfFormat.MODERN) {
     return (
       <div className="mb-8 border-b-2 border-indigo-600 pb-6">
         <div className="flex justify-between items-start mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-indigo-700 font-sans">{quiz.title}</h1>
+            <h1 className="text-2xl font-bold text-indigo-700 font-sans">
+              {quiz.title} {isTeacher && <span className="text-emerald-600 text-sm ml-2 font-normal italic">(Soluzioni per Docente)</span>}
+            </h1>
             <p className="text-slate-500 text-sm font-sans">Fila {quiz.versionLabel || 'A'}</p>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4 text-sm font-sans">
           <div className="flex border-b border-slate-300 pb-1">
             <span className="font-semibold mr-2">Nome:</span>
-            <div className="flex-1"></div>
+            <div className="flex-1">{isTeacher && <span className="text-emerald-600 font-bold">DOCENTE</span>}</div>
           </div>
           <div className="flex border-b border-slate-300 pb-1">
             <span className="font-semibold mr-2">Data:</span>
@@ -59,12 +62,12 @@ export const PrintableHeader: React.FC<{ quiz: Quiz; language?: string; pdfForma
         <div className="flex justify-between items-end mb-2">
           <div className="flex-1 pr-6 pb-2">
             <h1 className="text-2xl font-bold font-sans uppercase tracking-tight">{quiz.title}</h1>
-            {language && <p className="text-slate-600 font-sans text-xs font-semibold lowercase italic">Worksheet • {language}</p>}
+            {language && <p className="text-slate-600 font-sans text-xs font-semibold lowercase italic">Worksheet • {language} {isTeacher && '• Solutions Key'}</p>}
           </div>
           <div className="grid grid-cols-2 gap-x-4 gap-y-2 w-72 text-[10px] font-sans">
             <div className="flex items-end gap-1 border-b border-black pb-0.5">
               <span className="font-bold">Name:</span>
-              <div className="flex-1 min-w-[50px]"></div>
+              <div className="flex-1 min-w-[50px]">{isTeacher && <span className="text-emerald-600 font-bold text-[9px]">TEACHER</span>}</div>
             </div>
             <div className="flex items-end gap-1 border-b border-black pb-0.5">
               <span className="font-bold">Surname:</span>
@@ -90,13 +93,13 @@ export const PrintableHeader: React.FC<{ quiz: Quiz; language?: string; pdfForma
       <div className="mb-8 border-b-2 border-black pb-6">
         <div className="flex justify-center mb-8">
           <h1 className="text-3xl font-bold uppercase tracking-widest text-center">
-            {language ? `Compito di ${language}` : quiz.title}
+            {language ? `Compito di ${language}` : quiz.title} {isTeacher && <span className="text-lg text-emerald-600 font-sans block normal-case font-semibold tracking-normal mt-1">(Soluzioni per Docente)</span>}
           </h1>
         </div>
         <div className="space-y-6 text-lg">
           <div className="flex items-end w-full">
             <span className="font-semibold whitespace-nowrap pb-1">Nome e Cognome:</span>
-            <div className="flex-grow border-b border-black ml-2 mb-1"></div>
+            <div className="flex-grow border-b border-black ml-2 mb-1">{isTeacher && <span className="text-emerald-600 font-bold">CHIAVE DOCENTE</span>}</div>
           </div>
           <div className="flex items-end justify-start w-full gap-x-16">
             <div className="flex items-end">
@@ -169,50 +172,67 @@ export const PrintableReadingText: React.FC<{ text: string; pdfFormat: PdfFormat
   );
 };
 
-export const PrintableListeningText: React.FC<{ text: string; pdfFormat: PdfFormat }> = ({ text, pdfFormat }) => {
+export const PrintableListeningText: React.FC<{ text: string; pdfFormat: PdfFormat; isTeacher?: boolean }> = ({ text, pdfFormat, isTeacher }) => {
+  if (!isTeacher) return null; // Students must not see the transcript
   const isClassic = pdfFormat === PdfFormat.CLASSIC;
   return (
-    <div className={`mb-4 p-3 border border-gray-300 bg-gray-50 italic text-[11px] ${isClassic ? 'ml-0' : 'ml-4'}`}>
-      <p className="font-semibold mb-1">Trascrizione:</p>
+    <div className={`mb-4 p-3 border border-emerald-300 bg-emerald-50/30 italic text-[11px] ${isClassic ? 'ml-0' : 'ml-4'}`}>
+      <p className="font-semibold mb-1 text-emerald-800">Trascrizione Listening (Solo Docente):</p>
       <p>{text}</p>
     </div>
   );
 };
 
-export const PrintableQuestionItem: React.FC<{ question: Question; qIdx: number; pdfFormat: PdfFormat }> = ({ question, qIdx, pdfFormat }) => {
+export const PrintableQuestionItem: React.FC<{ question: Question; qIdx: number; pdfFormat: PdfFormat; isTeacher?: boolean }> = ({ question, qIdx, pdfFormat, isTeacher }) => {
   const isClassic = pdfFormat === PdfFormat.CLASSIC;
   return (
     <div className="break-inside-avoid text-[13px] mb-4 w-full">
       <p className="font-semibold mb-1">{qIdx + 1}. {question.questionText}</p>
       {question.questionType === QuestionType.MULTIPLE_CHOICE && question.options && (
         <div className="space-y-1 pl-4">
-          {question.options.map((opt: QuestionOption, oIdx: number) => (
-            <div key={oIdx} className="flex items-start">
-              {isClassic ? (
-                <span className="font-bold font-sans text-[11px] mr-2 w-4">{String.fromCharCode(65 + oIdx)})</span>
-              ) : (
-                <div className="w-4 h-4 border border-black rounded-full mr-3 mt-1 flex-shrink-0"></div>
-              )}
-              <span>{opt.text}</span>
-            </div>
-          ))}
+          {question.options.map((opt: QuestionOption, oIdx: number) => {
+            const isCorrect = opt.isCorrect;
+            const showAsCorrect = isTeacher && isCorrect;
+            return (
+              <div key={oIdx} className="flex items-start">
+                {isClassic ? (
+                  <span className={`font-bold font-sans text-[11px] mr-2 w-4 ${showAsCorrect ? 'text-emerald-600 font-extrabold' : ''}`}>
+                    {String.fromCharCode(65 + oIdx)})
+                  </span>
+                ) : (
+                  <div className={`w-4 h-4 border rounded-full mr-3 mt-1 flex-shrink-0 ${showAsCorrect ? 'bg-emerald-500 border-emerald-600' : 'border-black'}`}></div>
+                )}
+                <span className={showAsCorrect ? 'text-emerald-600 font-bold' : ''}>
+                  {opt.text} {showAsCorrect && ' ✓'}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
       {question.questionType === QuestionType.TRANSLATION && (
-        pdfFormat === PdfFormat.MODERN ? (
-          <div className="mt-6 border-b border-indigo-300 border-dashed w-full h-8"></div>
+        isTeacher && question.correctAnswer ? (
+          <div className="mt-1 pl-4 text-emerald-600 font-semibold italic">Soluzione: {question.correctAnswer}</div>
         ) : (
-          <div className="mt-4 border-b border-black border-dashed w-full h-6"></div>
+          pdfFormat === PdfFormat.MODERN ? (
+            <div className="mt-6 border-b border-indigo-300 border-dashed w-full h-8"></div>
+          ) : (
+            <div className="mt-4 border-b border-black border-dashed w-full h-6"></div>
+          )
         )
       )}
       {(question.questionType === QuestionType.FILL_IN_THE_BLANK || question.questionType === QuestionType.SHORT_ANSWER) && (
-        <div className="mt-2 border-b border-black border-dashed w-full h-4"></div>
+        isTeacher && question.correctAnswer ? (
+          <div className="mt-1 pl-4 text-emerald-600 font-semibold italic">Soluzione: {question.correctAnswer}</div>
+        ) : (
+          <div className="mt-2 border-b border-black border-dashed w-full h-4"></div>
+        )
       )}
     </div>
   );
 };
 
-export const PrintableExerciseItem: React.FC<{ item: any; pdfFormat: PdfFormat }> = ({ item, pdfFormat }) => {
+export const PrintableExerciseItem: React.FC<{ item: any; pdfFormat: PdfFormat; isTeacher?: boolean }> = ({ item, pdfFormat, isTeacher }) => {
   const isClassic = pdfFormat === PdfFormat.CLASSIC;
 
   if (item.kind === 'listening') {
@@ -220,10 +240,10 @@ export const PrintableExerciseItem: React.FC<{ item: any; pdfFormat: PdfFormat }
     return (
       <div className={`mb-8 ${isClassic ? 'pt-2' : 'break-inside-avoid'}`}>
         <PrintableExHeader title={`Listening Comprehension (${section.topic})`} descKey="Listening" displayNum={item.displayNum} pdfFormat={pdfFormat} />
-        <PrintableListeningText text={section.text} pdfFormat={pdfFormat} />
+        <PrintableListeningText text={section.text} pdfFormat={pdfFormat} isTeacher={isTeacher} />
         <div className={`space-y-6 ${isClassic ? 'pl-2' : 'pl-4'}`}>
           {section.questions.map((q: Question, qIdx: number) => (
-            <PrintableQuestionItem key={qIdx} question={q} qIdx={qIdx} pdfFormat={pdfFormat} />
+            <PrintableQuestionItem key={qIdx} question={q} qIdx={qIdx} pdfFormat={pdfFormat} isTeacher={isTeacher} />
           ))}
         </div>
       </div>
@@ -238,7 +258,7 @@ export const PrintableExerciseItem: React.FC<{ item: any; pdfFormat: PdfFormat }
         <PrintableReadingText text={section.text} pdfFormat={pdfFormat} />
         <div className={`space-y-6 ${isClassic ? 'pl-2' : 'pl-4'}`}>
           {section.questions.map((q: Question, qIdx: number) => (
-            <PrintableQuestionItem key={qIdx} question={q} qIdx={qIdx} pdfFormat={pdfFormat} />
+            <PrintableQuestionItem key={qIdx} question={q} qIdx={qIdx} pdfFormat={pdfFormat} isTeacher={isTeacher} />
           ))}
         </div>
       </div>
@@ -252,7 +272,7 @@ export const PrintableExerciseItem: React.FC<{ item: any; pdfFormat: PdfFormat }
         <PrintableExHeader title={`${section.type} (${section.topic})`} descKey={section.type} displayNum={item.displayNum} pdfFormat={pdfFormat} />
         <div className={`space-y-6 ${isClassic ? 'pl-2' : 'pl-4'}`}>
           {section.questions.map((q: Question, qIdx: number) => (
-            <PrintableQuestionItem key={qIdx} question={q} qIdx={qIdx} pdfFormat={pdfFormat} />
+            <PrintableQuestionItem key={qIdx} question={q} qIdx={qIdx} pdfFormat={pdfFormat} isTeacher={isTeacher} />
           ))}
         </div>
       </div>
@@ -280,7 +300,7 @@ export const PrintableWritingItem: React.FC<{ prompt: WritingPrompt; idx: number
   );
 };
 
-const PrintableQuiz: React.FC<PrintableQuizProps> = ({ quiz, language, pdfFormat = PdfFormat.MODERN }) => {
+const PrintableQuiz: React.FC<PrintableQuizProps> = ({ quiz, language, pdfFormat = PdfFormat.MODERN, isTeacher = false }) => {
   // Raggruppa le domande per argomento e tipo come nel preview
   const groupedQuestions = quiz.questions.reduce((acc, question) => {
     const topic = question.topic || 'Senza Argomento';
@@ -320,24 +340,24 @@ const PrintableQuiz: React.FC<PrintableQuizProps> = ({ quiz, language, pdfFormat
     mainContent = (
       <div style={{ display: 'flex', gap: '2.5rem', width: '100%', alignItems: 'flex-start', overflow: 'visible' }}>
         <div style={{ width: '50%', display: 'flex', flexDirection: 'column', overflow: 'visible' }}>
-          {leftCol.map((item, idx) => <PrintableExerciseItem key={`l-${idx}`} item={item} pdfFormat={pdfFormat} />)}
+          {leftCol.map((item, idx) => <PrintableExerciseItem key={`l-${idx}`} item={item} pdfFormat={pdfFormat} isTeacher={isTeacher} />)}
         </div>
         <div style={{ width: '50%', display: 'flex', flexDirection: 'column', overflow: 'visible' }}>
-          {rightCol.map((item, idx) => <PrintableExerciseItem key={`r-${idx}`} item={item} pdfFormat={pdfFormat} />)}
+          {rightCol.map((item, idx) => <PrintableExerciseItem key={`r-${idx}`} item={item} pdfFormat={pdfFormat} isTeacher={isTeacher} />)}
         </div>
       </div>
     );
   } else {
     mainContent = (
       <div className="space-y-8">
-        {allItems.map((item, idx) => <PrintableExerciseItem key={idx} item={item} pdfFormat={pdfFormat} />)}
+        {allItems.map((item, idx) => <PrintableExerciseItem key={idx} item={item} pdfFormat={pdfFormat} isTeacher={isTeacher} />)}
       </div>
     );
   }
 
   return (
     <div className={`p-12 bg-white text-black ${bodyFont}`} style={{ width: '190mm', minHeight: '277mm', boxSizing: 'border-box' }}>
-      <PrintableHeader quiz={quiz} language={language} pdfFormat={pdfFormat} />
+      <PrintableHeader quiz={quiz} language={language} pdfFormat={pdfFormat} isTeacher={isTeacher} />
       <div>
         {mainContent}
         {/* Writing Prompts */}

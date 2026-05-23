@@ -101,3 +101,21 @@ export interface HistoryEntry {
   quizzes: Quiz[]; // Changed from quiz: Quiz to support multiple versions
   params: QuizGenerationParams;
 }
+
+export interface AddExerciseParams {
+  topic: string;
+  kind: 'standard' | 'reading' | 'listening' | 'writing';
+  mode: 'manual' | 'ai';
+  standardType?: string; // 'Scelta Multipla', 'Completa gli Spazi', etc.
+  standardCount?: number;
+  readingWordCount?: number;
+  readingExerciseType?: string;
+  readingQuestionCount?: number;
+  writingWordLimit?: number;
+  writingDirectives?: string;
+  listeningDurationSeconds?: number;
+  listeningExerciseType?: string;
+  listeningQuestionCount?: number;
+  listeningDirectives?: string;
+}
+

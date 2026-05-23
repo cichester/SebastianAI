@@ -90,12 +90,6 @@ router.post('/create', async (req, res) => {
       });
 
       (quiz.listeningSections || []).filter(ls => ls.topic === topic).forEach(section => {
-        requests.push({
-          createItem: {
-            item: { title: 'Transcript', description: section.text, textItem: {} },
-            location: { index: index++ }
-          }
-        });
         section.questions.forEach(q => addQuestionToRequests(q, requests, index++));
       });
 
