@@ -16,7 +16,7 @@ import { SunIcon, MoonIcon } from './components/icons';
 import { generateQuiz, regenerateQuestions, regenerateComplexSection, regenerateWritingPrompt, type GenerationProgress } from './services/geminiService';
 import { validateQuizDraft, validateRegeneratedQuestions, validateRegeneratedComplexSection, validateRegeneratedWritingPrompt } from './utils/validation';
 import type { Quiz, QuizGenerationParams, Question, HistoryEntry, ReadingSection, ListeningSection, WritingPrompt, AddExerciseParams } from './types';
-import { PdfFormat, QuestionType } from './types';
+import { QuestionType } from './types';
 import { HISTORY_KEY } from './constants';
 import { safeGetItem, safeSetItem, safeRemoveItem } from './utils/storage';
 
@@ -76,7 +76,7 @@ const getErrorDetails = (errText: string) => {
 const App: React.FC = () => {
   const [quizParams, setQuizParams] = useState<QuizGenerationParams | null>(null);
   const [pendingParams, setPendingParams] = useState<QuizGenerationParams | null>(null);
-  const [showFormatSelector, setShowFormatSelector] = useState<boolean>(false);
+
   const [quizDraft, setQuizDraft] = useState<Quiz[] | null>(null); // Changed to array
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [generationProgress, setGenerationProgress] = useState<GenerationProgress>({ percentage: 0, message: '' });
@@ -128,12 +128,7 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState<boolean>(false);
   const [currentView, setCurrentView] = useState<'welcome' | 'dashboard' | 'create' | 'preview' | 'settings'>('welcome');
-  const [pdfFormat, setPdfFormat] = useState<PdfFormat>(() => {
-    if (typeof window !== 'undefined' && safeGetItem('pdfFormat')) {
-        return safeGetItem('pdfFormat') as PdfFormat;
-    }
-    return PdfFormat.MODERN;
-  });
+
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined' && safeGetItem('theme')) {
@@ -309,19 +304,8 @@ const App: React.FC = () => {
 
   const handleGenerateQuiz = useCallback((params: QuizGenerationParams) => {
     setPendingParams(params);
-    setShowFormatSelector(true);
-  }, []);
-
-  const confirmGeneration = (selectedFormat?: PdfFormat) => {
-    if (selectedFormat) {
-      setPdfFormat(selectedFormat);
-      localStorage.setItem('pdfFormat', selectedFormat);
-    }
-    setShowFormatSelector(false);
-    if (pendingParams) {
-      startQuizGeneration(pendingParams);
-    }
-  };
+    startQuizGeneration(params);
+  }, [startQuizGeneration]);
 
   const handleFullRegenerate = useCallback(() => {
     if (quizParams) {
@@ -511,7 +495,7 @@ const App: React.FC = () => {
     try {
         const createdUrls: string[] = [];
         const allErrors: FailedQuestionInfo[] = [];
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || (import.meta.env.PROD ? window.location.origin : 'http://localhost:3001');
 
         for (let i = 0; i < quizDraft.length; i++) {
              const quiz = quizDraft[i];
@@ -578,7 +562,7 @@ const App: React.FC = () => {
 
     try {
         const createdUrls: string[] = [];
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || (import.meta.env.PROD ? window.location.origin : 'http://localhost:3001');
 
          for (let i = 0; i < quizDraft.length; i++) {
              const quiz = quizDraft[i];
@@ -1218,96 +1202,7 @@ const App: React.FC = () => {
             <QuizInputForm onGenerate={handleGenerateQuiz} isLoading={isLoading} />
             
 
-            <AnimatePresence>
-              {showFormatSelector && pendingParams && (
-                <motion.div 
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
-                >
-                  <motion.div 
-                    initial={{ scale: 0.9, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0.9, opacity: 0 }}
-                    className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700 max-w-lg w-full"
-                  >
-                    <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Conferma Creazione</h3>
-                    <p className="text-slate-600 dark:text-slate-400 mb-6">
-                      Stai per generare un quiz in <span className="font-semibold text-slate-900 dark:text-white">{pendingParams.language}</span> ({pendingParams.level}) con <span className="font-semibold text-slate-900 dark:text-white">{pendingParams.numVersions} varianti</span> (Fila A, B...).
-                    </p>
-                    
-                    <div className="space-y-4 mb-8">
-                      <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Scegli il formato del PDF:</p>
-                      <div className="grid grid-cols-2 gap-4">
-                        <button 
-                          type="button"
-                          onClick={() => setPdfFormat(PdfFormat.MODERN)}
-                          className={`flex flex-col items-center p-4 rounded-2xl border-2 transition-all ${
-                            pdfFormat === PdfFormat.MODERN 
-                            ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' 
-                            : 'border-slate-100 dark:border-slate-700 hover:border-slate-200 dark:hover:border-slate-600 bg-slate-50 dark:bg-slate-800/50'
-                          }`}
-                        >
-                          <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/40 rounded-full flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                            </svg>
-                          </div>
-                          <span className="font-bold text-slate-900 dark:text-white">Moderno</span>
-                          <span className="text-xs text-slate-500 text-center mt-1">Design pulito con icone e box colorati.</span>
-                        </button>
-                        
-                        <button 
-                          type="button"
-                          onClick={() => setPdfFormat(PdfFormat.CLASSIC)}
-                          className={`flex flex-col items-center p-4 rounded-2xl border-2 transition-all ${
-                            pdfFormat === PdfFormat.CLASSIC 
-                            ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' 
-                            : 'border-slate-100 dark:border-slate-700 hover:border-slate-200 dark:hover:border-slate-600 bg-slate-50 dark:bg-slate-800/50'
-                          }`}
-                        >
-                          <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/40 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400 mb-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                            </svg>
-                          </div>
-                          <span className="font-bold text-slate-900 dark:text-white">Classico</span>
-                          <span className="text-xs text-slate-500 text-center mt-1">Formato standard ad alta leggibilità.</span>
-                        </button>
-                      </div>
 
-                      {/* Illustrative template image preview */}
-                      <div className="mt-4 border border-slate-200 dark:border-slate-700/60 rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-900/40 p-3 flex flex-col items-center shadow-inner">
-                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">
-                          Anteprima Layout {pdfFormat === PdfFormat.MODERN ? 'Moderno' : 'Classico'}
-                        </span>
-                        <img 
-                          src={pdfFormat === PdfFormat.MODERN ? '/template_modern.png' : '/template_classic.png'} 
-                          alt="Layout Template Preview" 
-                          className="h-44 object-contain rounded border border-slate-200 dark:border-slate-700 shadow-sm transition-all duration-300"
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="flex space-x-3">
-                      <button 
-                        onClick={() => setShowFormatSelector(false)}
-                        className="flex-1 px-6 py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-2xl hover:bg-slate-200 dark:hover:bg-slate-600 transition"
-                      >
-                        Indietro
-                      </button>
-                      <button 
-                        onClick={() => confirmGeneration()}
-                        className="flex-[2] px-6 py-3 bg-emerald-600 text-white font-bold rounded-2xl hover:bg-emerald-700 transition shadow-lg shadow-emerald-600/20"
-                      >
-                        Inizia Creazione &rarr;
-                      </button>
-                    </div>
-                  </motion.div>
-                </motion.div>
-              )}
-            </AnimatePresence>
             
           </div>
         )}
@@ -1330,7 +1225,7 @@ const App: React.FC = () => {
                    onUpdateQuiz={handleUpdateQuiz}
                    onRemoveExercise={handleRemoveExercise}
                    onAddExercise={handleAddExercise}
-                   pdfFormat={pdfFormat}
+
                    isCreating={formCreationState.status === 'loading' || docCreationState.status === 'loading'}
                    isRegeneratingId={isRegenerating}
                    formCreationStateUI={getFormCreationStateUI()}
@@ -1345,16 +1240,11 @@ const App: React.FC = () => {
       {isSettingsModalOpen && (
         <SettingsModal 
             currentUrl={webAppUrl}
-            currentPdfFormat={pdfFormat}
             onClose={() => setIsSettingsModalOpen(false)}
             onSave={(url) => {
                 setWebAppUrl(url);
                 safeSetItem('googleWebAppUrl', url);
                 setIsSettingsModalOpen(false);
-            }}
-            onSavePdfFormat={(format) => {
-                setPdfFormat(format);
-                safeSetItem('pdfFormat', format);
             }}
         />
       )}

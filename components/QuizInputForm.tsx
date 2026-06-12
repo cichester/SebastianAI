@@ -139,21 +139,14 @@ const QuizInputForm: React.FC<QuizInputFormProps> = ({ onGenerate, isLoading }) 
           </div>
           <div>
             <label className="block text-sm text-slate-600 dark:text-slate-400 mb-2 font-medium transition-colors">Numero di File (Varianti)</label>
-            <div className="relative">
-              <input
-                type="number"
-                min="1"
-                max="4"
-                value={numVersions}
-                onChange={(e) => setNumVersions(parseInt(e.target.value) || 1)}
-                className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 transition-colors"
-              />
-               <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-slate-400">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
-                  </svg>
-               </div>
-            </div>
+            <input
+              type="number"
+              min="1"
+              max="4"
+              value={numVersions}
+              onChange={(e) => setNumVersions(parseInt(e.target.value) || 1)}
+              className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 transition-colors"
+            />
             <p className="text-xs text-slate-500 mt-2">Massimo 4 varianti</p>
           </div>
           <div>

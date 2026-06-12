@@ -1,7 +1,7 @@
 {
   "name": "butler-ai-backend",
   "version": "1.0.0",
-  "description": "Backend per Butler AI - Integrazione Google API",
+  "description": "Backend per Sebastian AI - Integrazione Google API",
   "main": "server.js",
   "type": "module",
   "scripts": {

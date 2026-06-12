@@ -29,7 +29,7 @@ app.use('/api/docs', docsRoutes);
 app.use('/api/forms', formsRoutes);
 
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', message: 'Butler AI Backend is running' });
+  res.status(200).json({ status: 'ok', message: 'Sebastian AI Backend is running' });
 });
 
 // Servire i file statici del frontend in produzione

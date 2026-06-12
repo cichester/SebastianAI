@@ -37,7 +37,7 @@ router.post('/create', async (req, res) => {
     // Descrizione iniziale
     requests.push({
       updateFormInfo: {
-        info: { description: 'Quiz generato automaticamente da Butler AI. Per favore, rispondi a tutte le domande.' },
+        info: { description: 'Quiz generato automaticamente da Sebastian AI. Per favore, rispondi a tutte le domande.' },
         updateMask: 'description'
       }
     });

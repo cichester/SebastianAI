@@ -136,6 +136,9 @@ function buildPrompt(params: QuizGenerationParams, versionLabel: string, listeni
         } else {
           readingDetails = `- Esercizio di Reading Comprehension:\n  - Genera un testo di circa ${topic.reading.wordCount} parole.\n  - Basato sul testo, crea le seguenti domande:\n${readingExerciseCounts.split('\n').map(l => `    ${l}`).join('\n')}`;
         }
+        if (topic.reading.directives) {
+          readingDetails += `\n  - **DIRETTIVE SPECIALI DI LETTURA (TASSATIVE)**: Devi assolutamente e rigorosamente rispettare queste indicazioni dell'utente per la generazione del testo e/o delle domande di lettura: "${topic.reading.directives}"`;
+        }
       }
     }
 
@@ -144,7 +147,7 @@ function buildPrompt(params: QuizGenerationParams, versionLabel: string, listeni
       const numW = topic.writing.numQuestions || 1;
       writingDetails = `- Esercizio di Writing: genera ESATTAMENTE ${numW} traccia/e di scrittura (ciascuna come oggetto separato nel vettore writingPrompts), ciascuna con un limite di ${topic.writing.wordLimit} parole.`;
       if (topic.writing.directives) {
-        writingDetails += `\n  - Direttive speciali: ${topic.writing.directives}`;
+        writingDetails += `\n  - **DIRETTIVE SPECIALI DI SCRITTURA (TASSATIVE)**: Devi assolutamente e rigorosamente rispettare queste indicazioni dell'utente per la traccia di scrittura: "${topic.writing.directives}"`;
       }
     }
 
@@ -171,7 +174,7 @@ function buildPrompt(params: QuizGenerationParams, versionLabel: string, listeni
           listeningDetails = `- Esercizio di Ascolto:\n  - Genera un testo (transcript) di circa ${wordEstimate} parole (per una durata audio di circa ${topic.listening.durationSeconds} secondi).\n  - Basato su questo testo, crea le seguenti domande:\n${listeningExerciseCounts.split('\n').map(l => `    ${l}`).join('\n')}`;
         }
         if (topic.listening.directives) {
-          listeningDetails += `\n  - Suggerimenti/Direttive per l'audio: ${topic.listening.directives}`;
+          listeningDetails += `\n  - **DIRETTIVE SPECIALI DI ASCOLTO (TASSATIVE)**: Devi assolutamente e rigorosamente rispettare queste indicazioni dell'utente per la generazione del testo (transcript) e/o delle domande di ascolto: "${topic.listening.directives}"`;
         }
       }
     }
@@ -477,7 +480,7 @@ export async function regenerateComplexSection(
     schema = readingSectionSchema;
     let directivesText = '';
     if (readConfig.directives) {
-      directivesText = `\n  - Suggerimenti/Direttive speciali per la lettura: ${readConfig.directives}`;
+      directivesText = `\n  - **DIRETTIVE SPECIALI DI LETTURA (TASSATIVE)**: Devi assolutamente e rigorosamente rispettare queste indicazioni dell'utente per la generazione del testo e/o delle domande di lettura: "${readConfig.directives}"`;
     }
     if (readConfig.mode === 'custom' && readConfig.customText) {
       prompt = `
@@ -510,7 +513,7 @@ export async function regenerateComplexSection(
     schema = listeningSectionSchema;
     let directivesText = '';
     if (listenConfig.directives) {
-      directivesText = `\n            - Suggerimenti/Direttive per l'audio: ${listenConfig.directives}`;
+      directivesText = `\n  - **DIRETTIVE SPECIALI DI ASCOLTO (TASSATIVE)**: Devi assolutamente e rigorosamente rispettare queste indicazioni dell'utente per la generazione del testo (transcript) e/o delle domande di ascolto: "${listenConfig.directives}"`;
     }
 
     if (customTranscript) {
@@ -524,7 +527,7 @@ export async function regenerateComplexSection(
             """
             Usa ESATTAMENTE il testo sopra per l'audio (non modificarlo).
             Basandoti su questo transcript specifico, crea le seguenti domande (che devono essere diverse e uniche rispetto alle altre file):
-            ${exerciseCounts}
+            ${exerciseCounts}${directivesText}
             
             IMPORTANTE: Le istruzioni generali o le frasi di partenza per gli esercizi di traduzione devono essere in italiano, dato che gli studenti sono di madrelingua italiana.
          `;
@@ -533,9 +536,9 @@ export async function regenerateComplexSection(
             Crea un esercizio di Ascolto (Listening) in ${language}.
             **Argomento:** ${topic}
             **Livello:** ${level}
-            Genera un transcript (testo) adatto per un audio di ${listenConfig.durationSeconds} secondi.${directivesText}
+            Genera un transcript (testo) adatto per un audio di ${listenConfig.durationSeconds} secondi.
             Basandoti sul transcript, crea le seguenti domande:
-            ${exerciseCounts}
+            ${exerciseCounts}${directivesText}
             
             IMPORTANTE: Le istruzioni generali o le frasi di partenza per gli esercizi di traduzione devono essere in italiano, dato che gli studenti sono di madrelingua italiana.
          `;
@@ -562,12 +565,13 @@ export async function regenerateWritingPrompt(
   config: TopicRequest['writing'],
   signal?: AbortSignal
 ): Promise<WritingPrompt> {
-  const wDirectives = config.directives ? ` basandosi rigorosamente sulle seguenti direttive IA dell'utente: "${config.directives}"` : '';
+  const wDirectives = config.directives ? `\n        - **DIRETTIVE SPECIALI DI SCRITTURA (TASSATIVE)**: Devi assolutamente e rigorosamente rispettare queste indicazioni dell'utente per la traccia di scrittura: "${config.directives}"` : '';
   const prompt = `
         Crea un singolo esercizio di produzione scritta (Writing) in ${language}.
         **Argomento:** ${topic}
         **Livello:** ${level}
-        **Limite di parole:** ${config.wordLimit} parole${wDirectives}
+        **Limite di parole:** ${config.wordLimit} parole
+        ${wDirectives}
 
         Genera una traccia di scrittura coinvolgente ed educativa adatta al livello e argomento specificati.
         

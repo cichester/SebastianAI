@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef, useCallback } from 'react';
 import html2pdf from 'html2pdf.js';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -22,7 +22,7 @@ interface QuizPreviewProps {
   onUpdateQuiz: (quizIndex: number, updatedQuiz: Quiz) => void;
   onRemoveExercise: (topic: string, exerciseType: 'standard' | 'reading' | 'listening' | 'writing', questionSubtype?: string) => void;
   onAddExercise: (params: AddExerciseParams) => Promise<void>;
-  pdfFormat: PdfFormat;
+
   isCreating: boolean;
   isRegeneratingId: string | null;
   formCreationStateUI?: React.ReactNode;
@@ -353,13 +353,23 @@ const ListeningSectionCard: React.FC<{ section: ListeningSection; onRegenerate: 
     );
 };
 
-const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateForm, onCreateDoc, onRegenerate, onRegenerateSection, onRegenerateComplexSection, onRegenerateWritingPrompt, onUpdateQuiz, onRemoveExercise, onAddExercise, pdfFormat, isCreating, isRegeneratingId, formCreationStateUI, docCreationStateUI }) => {
+const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateForm, onCreateDoc, onRegenerate, onRegenerateSection, onRegenerateComplexSection, onRegenerateWritingPrompt, onUpdateQuiz, onRemoveExercise, onAddExercise, isCreating, isRegeneratingId, formCreationStateUI, docCreationStateUI }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
   const pdfContainerRef = useRef<HTMLDivElement>(null);
   const [isPrinting, setIsPrinting] = useState(false);
   const [isGeneratingDocx, setIsGeneratingDocx] = useState(false);
+  const [showFormatPicker, setShowFormatPicker] = useState(false);
+  const [pdfFormat, setPdfFormat] = useState<PdfFormat>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('pdfFormat');
+      if (saved && Object.values(PdfFormat).includes(saved as PdfFormat)) {
+        return saved as PdfFormat;
+      }
+    }
+    return PdfFormat.MODERN;
+  });
 
   // Refs per la composizione manuale del PDF (Approccio 1)
   const manualHeaderRef = useRef<HTMLDivElement>(null);
@@ -558,10 +568,11 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
     }
   };
 
-  const handlePrint = async () => {
+  const handlePrint = async (formatOverride?: PdfFormat) => {
+    const format = formatOverride || pdfFormat;
     setIsPrinting(true);
     try {
-      if (pdfFormat === PdfFormat.CLASSIC) {
+      if (format === PdfFormat.CLASSIC) {
          const originalTab = activeTab;
          for (let i = 0; i < quizzes.length; i++) {
            setActiveTab(i);
@@ -611,6 +622,14 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
     } finally {
       setIsPrinting(false);
     }
+  };
+
+  const confirmFormatAndDownload = (selectedFormat: PdfFormat) => {
+    setPdfFormat(selectedFormat);
+    localStorage.setItem('pdfFormat', selectedFormat);
+    setShowFormatPicker(false);
+    // Pass format directly to avoid stale closure
+    handlePrint(selectedFormat);
   };
 
   const handleDownloadDocx = async () => {
@@ -768,7 +787,7 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
               <p className="text-slate-500 mb-4">Visualizza in anteprima e modifica le varianti generate prima dell'esportazione.</p>
                       <div className="flex flex-wrap gap-3 pb-4">
                 <button
-                    onClick={handlePrint}
+                    onClick={() => setShowFormatPicker(true)}
                     disabled={isPrinting || isAnyActionInProgress}
                     className="flex items-center px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 font-medium transition-colors disabled:opacity-50 text-sm shadow-sm"
                 >
@@ -1341,6 +1360,162 @@ const QuizPreview: React.FC<QuizPreviewProps> = ({ quizzes, language, onCreateFo
           </div>
         ))}
       </div>
+      
+      {/* Hidden container for PDF generation */}
+      <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
+        {quizzes.map((quiz, idx) => (
+          <React.Fragment key={idx}>
+            <div id={`pdf-container-student-${idx}`}>
+              <PrintableQuiz quiz={quiz} language={language} pdfFormat={pdfFormat} isTeacher={false} />
+            </div>
+            <div id={`pdf-container-teacher-${idx}`}>
+              <PrintableQuiz quiz={quiz} language={language} pdfFormat={pdfFormat} isTeacher={true} />
+            </div>
+          </React.Fragment>
+        ))}
+      </div>
+
+      {/* DOM hidden specific for manual PDF measurement (Approach 1) - STUDENT */}
+      {/* Usiamo box-sizing border-box e larghezza fissa per garantire misurazioni accurate */}
+      <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: '794px', backgroundColor: '#ffffff', color: '#000000' }}>
+        <div ref={manualHeaderRef} style={{ width: '714px', boxSizing: 'border-box', padding: '10px' }}>
+           <PrintableHeader quiz={activeQuiz} language={language} pdfFormat={pdfFormat} isTeacher={false} />
+        </div>
+        
+        {pdfUnits.map((unit: any, idx: number) => (
+          <div 
+            key={`m-unit-${idx}`} 
+            ref={el => { if(el) manualItemsRefs.current[idx] = el; }}
+            style={{ width: '340px', boxSizing: 'border-box', padding: '2px 8px', backgroundColor: '#ffffff' }} 
+            className={pdfFormat === PdfFormat.CLASSIC ? 'font-serif' : 'font-sans'}
+          >
+            {unit.type === 'header' && <div className="mt-2"><PrintableExHeader title={unit.data.title} descKey={unit.data.descKey} displayNum={unit.data.displayNum} pdfFormat={pdfFormat} /></div>}
+            {unit.type === 'reading_text' && <PrintableReadingText text={unit.text} pdfFormat={pdfFormat} />}
+            {unit.type === 'listening_text' && <PrintableListeningText text={unit.text} pdfFormat={pdfFormat} isTeacher={false} />}
+            {unit.type === 'question' && <PrintableQuestionItem question={unit.data.question} qIdx={unit.data.qIdx} pdfFormat={pdfFormat} isTeacher={false} />}
+          </div>
+        ))}
+
+        {activeQuiz.writingPrompts?.map((prompt, idx) => (
+          <div 
+            key={`m-write-${idx}`}
+            ref={el => { if(el) manualWritingRefs.current[idx] = el; }}
+            style={{ width: '714px', boxSizing: 'border-box', padding: '8px', backgroundColor: '#ffffff' }}
+            className={pdfFormat === PdfFormat.CLASSIC ? 'font-serif' : 'font-sans'}
+          >
+             <PrintableWritingItem prompt={prompt} idx={idx} displayNum={writingStartNum + idx} pdfFormat={pdfFormat} />
+          </div>
+        ))}
+      </div>
+
+      {/* DOM hidden specific for manual PDF measurement (Approach 1) - TEACHER */}
+      <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: '794px', backgroundColor: '#ffffff', color: '#000000' }}>
+        <div ref={manualHeaderTeacherRef} style={{ width: '714px', boxSizing: 'border-box', padding: '10px' }}>
+           <PrintableHeader quiz={activeQuiz} language={language} pdfFormat={pdfFormat} isTeacher={true} />
+        </div>
+        
+        {pdfUnits.map((unit: any, idx: number) => (
+          <div 
+            key={`m-unit-t-${idx}`} 
+            ref={el => { if(el) manualItemsTeacherRefs.current[idx] = el; }}
+            style={{ width: '340px', boxSizing: 'border-box', padding: '2px 8px', backgroundColor: '#ffffff' }} 
+            className={pdfFormat === PdfFormat.CLASSIC ? 'font-serif' : 'font-sans'}
+          >
+            {unit.type === 'header' && <div className="mt-2"><PrintableExHeader title={unit.data.title} descKey={unit.data.descKey} displayNum={unit.data.displayNum} pdfFormat={pdfFormat} /></div>}
+            {unit.type === 'reading_text' && <PrintableReadingText text={unit.text} pdfFormat={pdfFormat} />}
+            {unit.type === 'listening_text' && <PrintableListeningText text={unit.text} pdfFormat={pdfFormat} isTeacher={true} />}
+            {unit.type === 'question' && <PrintableQuestionItem question={unit.data.question} qIdx={unit.data.qIdx} pdfFormat={pdfFormat} isTeacher={true} />}
+          </div>
+        ))}
+
+        {activeQuiz.writingPrompts?.map((prompt, idx) => (
+          <div 
+            key={`m-write-t-${idx}`}
+            ref={el => { if(el) manualWritingTeacherRefs.current[idx] = el; }}
+            style={{ width: '714px', boxSizing: 'border-box', padding: '8px', backgroundColor: '#ffffff' }}
+            className={pdfFormat === PdfFormat.CLASSIC ? 'font-serif' : 'font-sans'}
+          >
+             <PrintableWritingItem prompt={prompt} idx={idx} displayNum={writingStartNum + idx} pdfFormat={pdfFormat} />
+          </div>
+        ))}
+      </div>
+
+      {/* PDF Format Picker Popup */}
+      {showFormatPicker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700 max-w-lg w-full animate-in fade-in zoom-in-95">
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Scegli il formato del PDF</h3>
+            <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">Seleziona il layout con cui vuoi scaricare i compiti.</p>
+            
+            <div className="space-y-4 mb-8">
+              <div className="grid grid-cols-2 gap-4">
+                <button 
+                  type="button"
+                  onClick={() => setPdfFormat(PdfFormat.MODERN)}
+                  className={`flex flex-col items-center p-4 rounded-2xl border-2 transition-all ${
+                    pdfFormat === PdfFormat.MODERN 
+                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' 
+                    : 'border-slate-100 dark:border-slate-700 hover:border-slate-200 dark:hover:border-slate-600 bg-slate-50 dark:bg-slate-800/50'
+                  }`}
+                >
+                  <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/40 rounded-full flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                    </svg>
+                  </div>
+                  <span className="font-bold text-slate-900 dark:text-white">Moderno</span>
+                  <span className="text-xs text-slate-500 text-center mt-1">Design pulito con icone e box colorati.</span>
+                </button>
+                
+                <button 
+                  type="button"
+                  onClick={() => setPdfFormat(PdfFormat.CLASSIC)}
+                  className={`flex flex-col items-center p-4 rounded-2xl border-2 transition-all ${
+                    pdfFormat === PdfFormat.CLASSIC 
+                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' 
+                    : 'border-slate-100 dark:border-slate-700 hover:border-slate-200 dark:hover:border-slate-600 bg-slate-50 dark:bg-slate-800/50'
+                  }`}
+                >
+                  <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/40 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400 mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                    </svg>
+                  </div>
+                  <span className="font-bold text-slate-900 dark:text-white">Classico</span>
+                  <span className="text-xs text-slate-500 text-center mt-1">Formato standard ad alta leggibilità.</span>
+                </button>
+              </div>
+
+              {/* Template preview */}
+              <div className="mt-4 border border-slate-200 dark:border-slate-700/60 rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-900/40 p-3 flex flex-col items-center shadow-inner">
+                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">
+                  Anteprima Layout {pdfFormat === PdfFormat.MODERN ? 'Moderno' : 'Classico'}
+                </span>
+                <img 
+                  src={pdfFormat === PdfFormat.MODERN ? '/template_modern.png' : '/template_classic.png'} 
+                  alt="Layout Template Preview" 
+                  className="h-44 object-contain rounded border border-slate-200 dark:border-slate-700 shadow-sm transition-all duration-300"
+                />
+              </div>
+            </div>
+            
+            <div className="flex space-x-3">
+              <button 
+                onClick={() => setShowFormatPicker(false)}
+                className="flex-1 px-6 py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-2xl hover:bg-slate-200 dark:hover:bg-slate-600 transition"
+              >
+                Annulla
+              </button>
+              <button 
+                onClick={() => confirmFormatAndDownload(pdfFormat)}
+                className="flex-[2] px-6 py-3 bg-emerald-600 text-white font-bold rounded-2xl hover:bg-emerald-700 transition shadow-lg shadow-emerald-600/20"
+              >
+                Scarica PDF &darr;
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
