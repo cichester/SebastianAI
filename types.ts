@@ -57,12 +57,6 @@ export interface TopicRequest {
   id: string; // Per le chiavi di React
   name: string;
   exercises: Record<string, number>;
-  combinedExercise?: {
-    enabled: boolean;
-    type1: string;
-    type2: string;
-    count: number;
-  };
   reading: {
     enabled: boolean;
     mode: 'generate' | 'custom';

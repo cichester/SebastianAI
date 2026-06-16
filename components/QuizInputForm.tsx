@@ -18,12 +18,6 @@ const createNewTopic = (): TopicRequest => ({
     'Risposta Breve': 0,
     'Traduzione': 0,
   },
-  combinedExercise: {
-    enabled: false,
-    type1: 'Completa gli Spazi',
-    type2: 'Traduzione',
-    count: 0
-  },
   reading: { enabled: false, mode: 'generate', customText: '', wordCount: 150, exercises: { 'Scelta Multipla': 5 }, directives: '' },
   writing: { enabled: false, wordLimit: 100, numQuestions: 1, directives: '' },
   listening: { enabled: false, durationSeconds: 60, exercises: { 'Scelta Multipla': 5 }, directives: '' },
@@ -59,12 +53,6 @@ const QuizInputForm: React.FC<QuizInputFormProps> = ({ onGenerate, isLoading }) 
         'Risposta Breve': 0,
         'Traduzione': 0,
       },
-      combinedExercise: {
-        enabled: false,
-        type1: 'Completa gli Spazi',
-        type2: 'Traduzione',
-        count: 0
-      },
       reading: { enabled: true, mode: 'generate', customText: '', wordCount: 150, exercises: { 'Scelta Multipla': 3 }, directives: '' },
       listening: { enabled: false, durationSeconds: 60, exercises: { 'Scelta Multipla': 5 }, directives: '' },
       writing: { enabled: true, wordLimit: 100, numQuestions: 1, directives: '' }
@@ -81,9 +69,8 @@ const QuizInputForm: React.FC<QuizInputFormProps> = ({ onGenerate, isLoading }) 
   const isFormValid = () => {
     if (topic.name.trim() === '') return false;
     const hasExercises = Object.values(topic.exercises).some(count => (count as number) > 0);
-    const hasCombined = topic.combinedExercise?.enabled && topic.combinedExercise.count > 0;
     const hasExtra = topic.reading.enabled || topic.listening.enabled || topic.writing.enabled;
-    return hasExercises || hasCombined || hasExtra;
+    return hasExercises || hasExtra;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -102,8 +89,7 @@ const QuizInputForm: React.FC<QuizInputFormProps> = ({ onGenerate, isLoading }) 
     { key: 'Traduzione', label: 'Traduzione', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 016-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 01-3.827-5.802" /> }
   ];
 
-  const combinedCount = (topic.combinedExercise?.enabled && topic.combinedExercise.count) ? topic.combinedExercise.count : 0;
-  const totalExercises = Object.values(topic.exercises).reduce((a: number, b) => a + (b as number), 0) + combinedCount;
+  const totalExercises = Object.values(topic.exercises).reduce((a: number, b) => a + (b as number), 0);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8 pb-20">
@@ -222,119 +208,7 @@ const QuizInputForm: React.FC<QuizInputFormProps> = ({ onGenerate, isLoading }) 
                  </div>
                </div>
              )
-           })}
-         </div>
-      </div>
-
-      {/* Box 2.5: Esercizio Combinato */}
-       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 shadow-sm transition-colors">
-          <div className="flex justify-between items-center mb-6">
-             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 tracking-tight transition-colors">
-               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-indigo-600 dark:text-indigo-400">
-                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-               </svg>
-               Esercizio Combinato (Opzionale)
-             </h3>
-             <span className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold bg-indigo-50 dark:bg-indigo-950/30 px-3 py-1 rounded-full">Al massimo due tipologie</span>
-          </div>
-
-          <div className={`border rounded-xl p-5 transition-all duration-200 ${topic.combinedExercise?.enabled ? 'border-indigo-500 bg-indigo-50/20 dark:bg-indigo-950/10' : 'border-slate-200 dark:border-slate-700 bg-transparent'}`}>
-            <div className="flex items-start gap-4">
-              <input 
-                type="checkbox"
-                checked={topic.combinedExercise?.enabled || false}
-                onChange={(e) => setTopic(prev => ({
-                  ...prev,
-                  combinedExercise: {
-                    enabled: e.target.checked,
-                    type1: prev.combinedExercise?.type1 || 'Completa gli Spazi',
-                    type2: prev.combinedExercise?.type2 || 'Traduzione',
-                    count: e.target.checked ? (prev.combinedExercise?.count || 5) : 0
-                  }
-                }))}
-                className="w-5 h-5 mt-1 rounded border-slate-300 dark:border-slate-600 text-indigo-600 focus:ring-indigo-600 bg-white dark:bg-slate-900 cursor-pointer"
-                id="toggle-combined"
-              />
-              <div className="flex-1">
-                <label htmlFor="toggle-combined" className="cursor-pointer select-none">
-                  <span className="font-bold text-slate-800 dark:text-slate-100 block transition-colors">Abilita Esercizio Combinato</span>
-                  <span className="text-sm text-slate-500 dark:text-slate-400 block transition-colors">Combina due compiti differenti in un unico esercizio (es. completa gli spazi + traduci).</span>
-                </label>
-
-                {topic.combinedExercise?.enabled && (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6 pt-4 border-t border-indigo-100 dark:border-indigo-900/40">
-                    <div>
-                      <label className="block text-sm text-slate-600 dark:text-slate-400 mb-2 font-medium">Primo Esercizio</label>
-                      <select
-                        value={topic.combinedExercise.type1}
-                        onChange={(e) => setTopic(prev => ({
-                          ...prev,
-                          combinedExercise: { ...prev.combinedExercise!, type1: e.target.value }
-                        }))}
-                        className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900"
-                      >
-                        <option value="Completa gli Spazi">Completa gli Spazi</option>
-                        <option value="Traduzione">Traduzione</option>
-                        <option value="Scelta Multipla">Scelta Multipla</option>
-                        <option value="Vero/Falso">Vero/Falso</option>
-                        <option value="Risposta Breve">Risposta Breve</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm text-slate-600 dark:text-slate-400 mb-2 font-medium">Secondo Esercizio</label>
-                      <select
-                        value={topic.combinedExercise.type2}
-                        onChange={(e) => setTopic(prev => ({
-                          ...prev,
-                          combinedExercise: { ...prev.combinedExercise!, type2: e.target.value }
-                        }))}
-                        className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900"
-                      >
-                        <option value="Traduzione">Traduzione</option>
-                        <option value="Completa gli Spazi">Completa gli Spazi</option>
-                        <option value="Scelta Multipla">Scelta Multipla</option>
-                        <option value="Vero/Falso">Vero/Falso</option>
-                        <option value="Risposta Breve">Risposta Breve</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm text-slate-600 dark:text-slate-400 mb-2 font-medium">Numero Domande</label>
-                      <div className="flex items-center border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 overflow-hidden w-full max-w-[150px]">
-                        <button 
-                          type="button" 
-                          onClick={() => setTopic(prev => ({
-                            ...prev,
-                            combinedExercise: { ...prev.combinedExercise!, count: Math.max(1, prev.combinedExercise!.count - 1) }
-                          }))}
-                          className="px-3 py-2 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-30 transition-colors"
-                          disabled={topic.combinedExercise.count <= 1}
-                        >&minus;</button>
-                        <input 
-                          type="number" 
-                          value={topic.combinedExercise.count} 
-                          onChange={(e) => {
-                            const val = Math.max(1, parseInt(e.target.value) || 1);
-                            setTopic(prev => ({
-                              ...prev,
-                              combinedExercise: { ...prev.combinedExercise!, count: val }
-                            }));
-                          }}
-                          className="w-12 text-center text-sm font-bold border-none focus:ring-0 text-slate-800 dark:text-slate-100 bg-transparent p-0"
-                        />
-                        <button 
-                          type="button" 
-                          onClick={() => setTopic(prev => ({
-                            ...prev,
-                            combinedExercise: { ...prev.combinedExercise!, count: prev.combinedExercise!.count + 1 }
-                          }))}
-                          className="px-3 py-2 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                        >&#43;</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+            })}
           </div>
        </div>
 
