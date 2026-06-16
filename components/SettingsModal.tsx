@@ -14,7 +14,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentUrl, onClose, onSa
     };
 
     const handleGoogleConnect = () => {
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || (import.meta.env.PROD ? window.location.origin : 'http://localhost:3001');
+        const backendUrl = import.meta.env.PROD ? window.location.origin : (import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001');
         window.location.href = `${backendUrl}/auth/google`;
     };
     

@@ -495,7 +495,7 @@ const App: React.FC = () => {
     try {
         const createdUrls: string[] = [];
         const allErrors: FailedQuestionInfo[] = [];
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || (import.meta.env.PROD ? window.location.origin : 'http://localhost:3001');
+        const backendUrl = import.meta.env.PROD ? window.location.origin : (import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001');
 
         for (let i = 0; i < quizDraft.length; i++) {
              const quiz = quizDraft[i];
@@ -562,7 +562,7 @@ const App: React.FC = () => {
 
     try {
         const createdUrls: string[] = [];
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || (import.meta.env.PROD ? window.location.origin : 'http://localhost:3001');
+        const backendUrl = import.meta.env.PROD ? window.location.origin : (import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001');
 
          for (let i = 0; i < quizDraft.length; i++) {
              const quiz = quizDraft[i];
