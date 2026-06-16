@@ -95,11 +95,19 @@ EOF`);
     }
     console.log('File .env remoto configurato correttamente con l\'IP del server!\n');
 
-    // 6. Restart PM2 process
+    // 6. Restart or start PM2 process
     console.log('--- Riavvio del server tramite PM2 ---');
-    const restartRes = await ssh.execCommand('pm2 restart SebastianAI');
-    console.log(restartRes.stdout || restartRes.stderr);
-    console.log('Processo riavviato!\n');
+    const checkRes = await ssh.execCommand('pm2 show SebastianAI');
+    if (checkRes.code === 0) {
+      const restartRes = await ssh.execCommand('pm2 restart SebastianAI');
+      console.log(restartRes.stdout || restartRes.stderr);
+      console.log('Processo riavviato!\n');
+    } else {
+      console.log('SebastianAI non esiste in PM2, avvio del processo...');
+      const startRes = await ssh.execCommand(`cd ${remoteRoot}/backend && pm2 start server.js --name SebastianAI`);
+      console.log(startRes.stdout || startRes.stderr);
+      console.log('Processo avviato per la prima volta!\n');
+    }
 
     ssh.dispose();
     console.log('--- Deploy completato con successo! ---');
